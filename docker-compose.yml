@@ -15,19 +15,61 @@ services:
       timeout: 5s
       retries: 10
 
-  forecast-service:
+  # ── Service d'initialisation (s'exécute une seule fois) ─────────────────────
+  # Insère un site demo, charge l'historique CSV, entraîne le modèle,
+  # génère la première prévision 48h.
+  forecast-init:
     build: .
-    env_file:
-      - .env
+    command: python scripts/init_demo.py
     environment:
       DATABASE_URL: postgresql://forecaster:forecaster@postgres:5432/forecaster
+      MODELS_DIR: /data/models
+      LOG_LEVEL: INFO
+    volumes:
+      - models_data:/data/models
+      - ./scripts:/app/scripts:ro   # mount local pour éviter un rebuild à chaque modif
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ── Service de prévision (scheduler APScheduler) ─────────────────────────────
+  forecast-service:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://forecaster:forecaster@postgres:5432/forecaster
+      MODELS_DIR: /data/models
+      MAPE_THRESHOLD: "15.0"
+      LOG_LEVEL: INFO
+      RTE_API_TOKEN: ""
     volumes:
       - models_data:/data/models
     depends_on:
       postgres:
         condition: service_healthy
+      forecast-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ── Grafana — visualisation des prévisions ────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports:
+      - "3000:3000"
+    environment:
+      # Accès anonyme en mode Admin pour la démo (pas de login requis)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - postgres
     restart: unless-stopped
 
 volumes:
   postgres_data:
   models_data:
+  grafana_data:
