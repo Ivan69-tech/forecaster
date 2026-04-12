@@ -173,9 +173,6 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
 
 ## Docker
 - Le Dockerfile utilise python:3.11-slim comme base.
-- Les dépendances sont épinglées à une version exacte dans requirements.txt
-  (pas de `>=`).
-- Le container ne tourne pas en root (USER 1000:1000 dans le Dockerfile).
 - Les secrets sont injectés via des variables d'environnement, jamais copiés
   dans l'image.
 

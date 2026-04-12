@@ -1,224 +1,459 @@
 {
-  "uid": "forecasts-conso",
-  "title": "Prévisions de Consommation",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
   "description": "Prévisions LightGBM 48h — site-demo-01",
-  "tags": ["forecaster", "consommation"],
-  "timezone": "browser",
-  "schemaVersion": 38,
-  "version": 1,
-  "refresh": "1m",
-  "time": {
-    "from": "now-24h",
-    "to": "now+48h"
-  },
-  "timepicker": {
-    "refresh_intervals": ["30s", "1m", "5m", "15m"]
-  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
   "panels": [
     {
-      "id": 1,
-      "type": "timeseries",
-      "title": "Consommation prévue — 48h (kW)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "forecaster-pg"
+      },
       "description": "Prévisions LightGBM générées par le ConsumptionModel. Zone grise = passé, courbe bleue = futur prévu.",
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
-      "datasource": { "type": "postgres", "uid": "forecaster-pg" },
-      "targets": [
-        {
-          "refId": "A",
-          "rawSql": "SELECT timestamp AS \"time\", puissance_kw AS \"Prévision conso (kW)\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND $__timeFilter(timestamp) ORDER BY timestamp ASC",
-          "format": "time_series"
-        }
-      ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "spanNulls": false,
-            "showPoints": "never"
+          "color": {
+            "mode": "palette-classic"
           },
-          "unit": "watt",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
           "displayName": "Consommation prévue",
+          "mappings": [],
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 500000 },
-              { "color": "red", "value": 650000 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500000
+              },
+              {
+                "color": "red",
+                "value": 650000
+              }
             ]
-          }
+          },
+          "unit": "kW"
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
       "options": {
-        "tooltip": { "mode": "single", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      }
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "forecaster-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT ON (timestamp)\r\n    timestamp AS \"time\",\r\n    puissance_kw AS \"Prévision conso (kW)\"\r\nFROM forecasts_consommation\r\nWHERE site_id = 'site-demo-01'\r\n  AND $__timeFilter(timestamp)\r\nORDER BY timestamp, date_generation DESC",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Consommation prévue — 48h (kW)",
+      "type": "timeseries"
     },
     {
-      "id": 2,
-      "type": "stat",
-      "title": "Prochaine heure (kW)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "forecaster-pg"
+      },
       "description": "Puissance prévue dans la prochaine heure",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 12 },
-      "datasource": { "type": "postgres", "uid": "forecaster-pg" },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500000
+              },
+              {
+                "color": "red",
+                "value": 650000
+              }
+            ]
+          },
+          "unit": "kW"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.4.2",
       "targets": [
         {
-          "refId": "A",
+          "format": "table",
           "rawSql": "SELECT AVG(puissance_kw) AS \"kW\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '1 hour'",
-          "format": "table"
+          "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "watt",
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 500000 },
-              { "color": "red", "value": 650000 }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      }
+      "title": "Prochaine heure (kW)",
+      "type": "stat"
     },
     {
-      "id": 3,
-      "type": "stat",
-      "title": "Pic prévu 48h (kW)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "forecaster-pg"
+      },
       "description": "Puissance maximale prévue sur les 48 prochaines heures",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 12 },
-      "datasource": { "type": "postgres", "uid": "forecaster-pg" },
-      "targets": [
-        {
-          "refId": "A",
-          "rawSql": "SELECT MAX(puissance_kw) AS \"kW\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '48 hours'",
-          "format": "table"
-        }
-      ],
       "fieldConfig": {
         "defaults": {
-          "unit": "watt",
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 500000 },
-              { "color": "red", "value": 650000 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500000
+              },
+              {
+                "color": "red",
+                "value": 650000
+              }
+            ]
+          },
+          "unit": "kW"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 12
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT MAX(puissance_kw) AS \"kW\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '48 hours'",
+          "refId": "A"
+        }
+      ],
+      "title": "Pic prévu 48h (kW)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "forecaster-pg"
+      },
+      "description": "Nombre d'heures de prévision disponibles",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "h"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 12
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) / 4 AS \"Heures\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW()",
+          "refId": "A"
+        }
+      ],
+      "title": "Horizon couvert",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "forecaster-pg"
+      },
+      "description": "Version du ConsumptionModel actif",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
             ]
           }
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      }
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Horizon couvert",
-      "description": "Nombre d'heures de prévision disponibles",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
-      "datasource": { "type": "postgres", "uid": "forecaster-pg" },
-      "targets": [
-        {
-          "refId": "A",
-          "rawSql": "SELECT COUNT(*) / 4 AS \"Heures\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW()",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "h",
-          "color": { "mode": "fixed", "fixedColor": "blue" }
-        },
-        "overrides": []
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 12
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      }
-    },
-    {
       "id": 5,
-      "type": "stat",
-      "title": "Version modèle",
-      "description": "Version du ConsumptionModel actif",
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
-      "datasource": { "type": "postgres", "uid": "forecaster-pg" },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.4.2",
       "targets": [
         {
-          "refId": "A",
+          "format": "table",
           "rawSql": "SELECT CONCAT(version, ' (MAPE: ', ROUND(mape_validation::numeric, 1), '%)') AS \"Modèle\" FROM modeles_versions WHERE type_modele = 'consumption' AND actif = true LIMIT 1",
-          "format": "table"
+          "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "purple" }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none"
-      }
+      "title": "Version modèle",
+      "type": "stat"
     },
     {
-      "id": 6,
-      "type": "table",
-      "title": "Prévisions détaillées — prochaines 6 heures",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
-      "datasource": { "type": "postgres", "uid": "forecaster-pg" },
-      "targets": [
-        {
-          "refId": "A",
-          "rawSql": "SELECT timestamp AT TIME ZONE 'Europe/Paris' AS \"Heure (Paris)\", ROUND(puissance_kw::numeric, 1) AS \"Puissance (kW)\", horizon_h AS \"Horizon (h)\", TO_CHAR(date_generation AT TIME ZONE 'Europe/Paris', 'HH24:MI') AS \"Généré à\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '6 hours' ORDER BY timestamp ASC",
-          "format": "table"
-        }
-      ],
+      "datasource": {
+        "type": "postgres",
+        "uid": "forecaster-pg"
+      },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Puissance (kW)" },
+            "matcher": {
+              "id": "byName",
+              "options": "Puissance (kW)"
+            },
             "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              },
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    { "color": "green", "value": null },
-                    { "color": "yellow", "value": 450 },
-                    { "color": "red", "value": 600 }
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 450
+                    },
+                    {
+                      "color": "red",
+                      "value": 600
+                    }
                   ]
                 }
               }
@@ -226,9 +461,67 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 6,
       "options": {
-        "sortBy": [{ "displayName": "Heure (Paris)", "desc": false }]
-      }
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Heure (Paris)"
+          }
+        ]
+      },
+      "pluginVersion": "10.4.2",
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT timestamp AT TIME ZONE 'Europe/Paris' AS \"Heure (Paris)\", ROUND(puissance_kw::numeric, 1) AS \"Puissance (kW)\", horizon_h AS \"Horizon (h)\", TO_CHAR(date_generation AT TIME ZONE 'Europe/Paris', 'HH24:MI') AS \"Généré à\" FROM forecasts_consommation WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '6 hours' ORDER BY timestamp ASC",
+          "refId": "A"
+        }
+      ],
+      "title": "Prévisions détaillées — prochaines 6 heures",
+      "type": "table"
     }
-  ]
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "forecaster",
+    "consommation"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "2026-04-09T23:10:55.461Z",
+    "to": "2026-04-15T23:10:55.463Z"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
+  "timezone": "browser",
+  "title": "Prévisions de Consommation",
+  "uid": "forecasts-conso",
+  "version": 1,
+  "weekStart": ""
 }
