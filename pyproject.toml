@@ -21,6 +21,8 @@ dependencies = [
     "pydantic-settings>=2.2",
     # Model serialization
     "joblib>=1.4",
+    # Calendrier jours fériés
+    "holidays>=0.45",
 ]
 
 [project.optional-dependencies]
