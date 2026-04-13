@@ -64,7 +64,6 @@
               "mode": "off"
             }
           },
-          "displayName": "Consommation prévue",
           "mappings": [],
           "min": 0,
           "thresholds": {
@@ -550,6 +549,6 @@
   "timezone": "browser",
   "title": "Prévisions de Consommation",
   "uid": "forecasts-conso",
-  "version": 1,
+  "version": 3,
   "weekStart": ""
 }
