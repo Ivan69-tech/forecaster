@@ -46,7 +46,7 @@ def main() -> None:
     scheduler = build_scheduler()
     logger.info("startup | scheduler configuré — %d jobs", len(scheduler.get_jobs()))
     for job in scheduler.get_jobs():
-        logger.info("startup |   · %s (next run: %s)", job.name, job.next_run_time)
+        logger.info("startup |   · %s (next run: %s)", job.name, getattr(job, "next_run_time", "N/A"))
 
     logger.info("startup | démarrage du scheduler (mode bloquant)")
     try:

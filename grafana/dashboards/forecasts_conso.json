@@ -135,6 +135,34 @@
             ],
             "limit": 50
           }
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "forecaster-pg"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    timestamp AS \"time\",\n    conso_kw AS \"Consommation réelle (kW)\"\nFROM mesures_reelles\nWHERE site_id = 'site-demo-01'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp ASC",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Consommation prévue — 48h (kW)",
