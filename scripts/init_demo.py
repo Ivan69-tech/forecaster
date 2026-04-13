@@ -238,13 +238,14 @@ def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
         temperature = _temperature_synthetique(ts_utc)
         production = _production_pv(irradiance, cloud_cover, temperature, SITE_PV_PEAK_KW, rng)
 
-        mappings.append({"id": row_id, "production_pv_kw": production})
+        # float() obligatoire : np.float64 n'est pas sérialisable par psycopg2
+        mappings.append({"id": row_id, "production_pv_kw": float(production)})
         meteo_lignes.append({
             "timestamp": ts_utc,
-            "irradiance_wm2": irradiance,
-            "cloud_cover_pct": cloud_cover,
-            "temperature_c": temperature,
-            "production_pv_kw": production,
+            "irradiance_wm2": float(irradiance),
+            "cloud_cover_pct": float(cloud_cover),
+            "temperature_c": float(temperature),
+            "production_pv_kw": float(production),
         })
 
     session.bulk_update_mappings(RealMeasure, mappings)
