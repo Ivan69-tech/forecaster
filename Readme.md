@@ -13,23 +13,35 @@ production PV, consommées par le Service d'Optimisation (L2).
 | Prévision | Modèle | Pas | Horizon |
 |-----------|--------|-----|---------|
 | **Consommation électrique** | LightGBM (`ConsumptionModel`) | 15 min | 48 h |
-| Production PV *(à venir)* | LightGBM (`PVProductionModel`) | 15 min | 48 h |
+| **Production PV** | LightGBM (`PVProductionModel`) | 15 min | 48 h |
 | Prix spot RTE *(à venir)* | Fetcher RTE | 1 h | J+1 |
 
-Le modèle de consommation utilise les features suivantes :
-- **Temporelles** : heure, jour de semaine, mois (encodage sin/cos cyclique)
+Le modèle de **consommation** utilise les features suivantes :
+- **Temporelles** : heure, jour de semaine, mois (encodage sin/cos cyclique), week-end
 - **Lags** : consommation à J-1 et J-7 à la même heure
 - **Météo** : température prévue et ses lags J-1, J-7
-- **Calendaire** : jours fériés français, week-end
+- **Calendaire** : jours fériés français
+
+Le modèle de **production PV** utilise les features suivantes :
+- **Météo** : irradiance GHI (W/m²), nébulosité (%), température (°C) — issues d'Open-Meteo
+- **Site** : puissance crête installée (kW)
+- **Temporelles** : heure et mois (encodage sin/cos — proxy de la position solaire)
+
+> Pas de lags de production dans le modèle PV : contrairement à la consommation (pilotée par
+> les habitudes humaines), la production PV est déterministe — elle dépend de la physique
+> instantanée. L'irradiance prévue suffit.
 
 ### Flux de données
 
 ```
-API Open-Meteo (météo)  ──┐
-PostgreSQL (mesures_reelles) ─┤─→ ConsumptionModel (LightGBM) ──→ forecasts_consommation
-                             │
-API RTE (prix spots)  ───────┘                      ↑
-                                          scheduler/jobs.py (APScheduler)
+API Open-Meteo (prévision météo) ──┐
+                                    ├─→ ConsumptionModel (LightGBM) ──→ forecasts_consommation
+PostgreSQL (mesures_reelles) ───────┤
+                                    ├─→ PVProductionModel (LightGBM) ──→ forecasts_production_pv
+API Open-Meteo (archive météo)  ───┘
+                                              ↑
+                                    scheduler/jobs.py (APScheduler)
+
 mesures_reelles ──→ pipeline/monitoring.py ──→ pipeline/training.py
                       (MAPE > 15% → réentraînement)
 ```
@@ -81,7 +93,8 @@ docker compose logs -f forecast-init
 
 1. `postgres` — démarre et passe le healthcheck
 2. `forecast-init` — insère un site démo, charge 100 jours d'historique synthétique,
-   entraîne le `ConsumptionModel`, génère la première prévision 48h, puis s'arrête
+   génère la production PV synthétique, entraîne le `ConsumptionModel` et le `PVProductionModel`,
+   génère les premières prévisions 48h (consommation + PV via Open-Meteo), puis s'arrête
 3. `forecast-service` — démarre le scheduler APScheduler (jobs récurrents)
 4. `grafana` — disponible immédiatement sur **http://localhost:3000**
 
@@ -206,18 +219,18 @@ Les appels HTTP sont mockés. Convention de chemin miroir :
 src/forecaster/
 ├── predictors/
 │   ├── base.py           — interface BaseForecastModel + ForecastPoint
-│   ├── consumption.py    — ConsumptionModel (LightGBM) ✓ implémenté
-│   └── pv_production.py  — PVProductionModel (LightGBM) — stub
+│   ├── consumption.py    — ConsumptionModel (LightGBM) ✓
+│   └── pv_production.py  — PVProductionModel (LightGBM) ✓
 ├── pipeline/
 │   ├── forecast.py       — orchestration prévision (stub)
-│   ├── training.py       — réentraînement LightGBM ✓ implémenté (conso)
+│   ├── training.py       — réentraînement LightGBM ✓ (conso + PV)
 │   └── monitoring.py     — calcul MAPE + déclenchement réentraînement (stub)
 ├── fetchers/
-│   ├── openmeteo.py      — météo Open-Meteo (stub)
+│   ├── openmeteo.py      — météo Open-Meteo ✓ (fetch_forecast + fetch_historical)
 │   └── rte.py            — prix spots RTE OAuth2 (stub)
 ├── db/
 │   ├── models.py         — ORM SQLAlchemy (6 tables)
-│   ├── readers.py        — requêtes de lecture DB
+│   ├── readers.py        — requêtes de lecture DB ✓ (conso + PV)
 │   └── session.py        — engine + SessionLocal
 ├── scheduler/
 │   └── jobs.py           — 5 jobs APScheduler
@@ -232,9 +245,8 @@ src/forecaster/
 | # | Sujet | Impact |
 |---|-------|--------|
 | 1 | `pipeline/forecast.py` non implémenté — la prévision en prod passe par `scripts/init_demo.py` | Bloquant pour la mise en production |
-| 2 | `fetchers/openmeteo.py` non implémenté — température = 0 dans l'entraînement actuel | Dégrade la précision du modèle en hiver/été |
-| 3 | `fetchers/rte.py` non implémenté — prix spots indisponibles | Bloquant pour l'optimisation L2 |
-| 4 | `PVProductionModel` non implémenté | Bloquant pour les sites avec panneaux PV |
-| 5 | `pipeline/monitoring.py` non implémenté — pas de réentraînement automatique sur dérive MAPE | Dégradation silencieuse en production |
-| 6 | Température dans `_load_training_data()` = 0 — à remplacer par l'archive Open-Meteo | Amélioration de précision |
-| 7 | `run_training()` non multi-site — agrège tous les sites | À corriger avant déploiement multi-sites |
+| 2 | `fetchers/rte.py` non implémenté — prix spots indisponibles | Bloquant pour l'optimisation L2 |
+| 3 | `pipeline/monitoring.py` non implémenté — pas de réentraînement automatique sur dérive MAPE | Dégradation silencieuse en production |
+| 4 | Température dans `_load_training_data()` (conso) = 0 — à remplacer par l'archive Open-Meteo | Amélioration de précision en hiver/été |
+| 5 | `run_training()` non multi-site — agrège tous les sites | À corriger avant déploiement multi-sites |
+| 6 | Modèle PV demo entraîné sur données synthétiques — sera remplacé dès le 1er réentraînement hebdomadaire (dimanche 02h00) avec données réelles Open-Meteo | Précision initiale limitée, s'améliore automatiquement |

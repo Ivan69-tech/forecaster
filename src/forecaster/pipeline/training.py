@@ -113,7 +113,7 @@ def _load_training_data(
         NotImplementedError: Si model_type == "pv_production" (non implémenté).
     """
     if model_type == "pv_production":
-        raise NotImplementedError("Chargement des données PV non encore implémenté.")
+        return _load_training_data_pv(session, cutoff)
 
     # Pour les tests, le site_id est passé via la session — on charge tous les sites disponibles.
     # En production, run_training() sera appelé par site. Pour l'instant on agrège.
@@ -211,6 +211,122 @@ def _register_new_version(
         chemin_artefact=str(artifact_path),
     )
     session.add(mv)
+
+
+def _load_training_data_pv(
+    session: Session, cutoff: datetime
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Charge les données d'entraînement PV depuis mesures_reelles + Open-Meteo archive.
+
+    Pour chaque site en DB :
+      1. Lit production_pv_kw depuis mesures_reelles depuis `cutoff`
+      2. Récupère la météo historique (irradiance, cloud_cover, température)
+         depuis l'API archive Open-Meteo pour la même période
+      3. Rééchantillonne la météo horaire → 15 min (interpolation linéaire)
+      4. Jointure sur timestamp
+      5. Ajoute p_pv_peak_kw (constante par site)
+
+    Tous les sites sont concaténés avant le split train/val.
+
+    Raises:
+        InsufficientDataError: Si les données sont insuffisantes après nettoyage.
+    """
+    from forecaster.db.models import Site
+    from forecaster.db.readers import get_mesures_reelles_production_pv
+    from forecaster.fetchers.openmeteo import fetch_historical
+
+    sites = session.query(Site).all()
+    if not sites:
+        raise InsufficientDataError("Aucun site trouvé en base — impossible d'entraîner le modèle PV.")
+
+    fragments = []
+    for site in sites:
+        df_pv = get_mesures_reelles_production_pv(session, site.site_id, cutoff)
+        if df_pv.empty:
+            logger.warning(
+                "_load_training_data_pv | site=%s | aucune donnée PV — site ignoré",
+                site.site_id,
+            )
+            continue
+
+        start_date = df_pv["timestamp"].min().date()
+        end_date = df_pv["timestamp"].max().date()
+
+        try:
+            meteo = fetch_historical(
+                site_id=site.site_id,
+                latitude=site.latitude,
+                longitude=site.longitude,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except Exception:
+            logger.exception(
+                "_load_training_data_pv | site=%s | échec fetch_historical — site ignoré",
+                site.site_id,
+            )
+            continue
+
+        # Construire un DataFrame hourly de météo, puis rééchantillonner en 15 min
+        df_meteo = pd.DataFrame(
+            [
+                {
+                    "timestamp": p.timestamp,
+                    "temperature_c": p.temperature_c,
+                    "irradiance_wm2": p.irradiance_wm2,
+                    "cloud_cover_pct": p.cloud_cover_pct,
+                }
+                for p in meteo.points
+            ]
+        )
+        df_meteo["timestamp"] = pd.to_datetime(df_meteo["timestamp"], utc=True)
+        df_meteo = df_meteo.set_index("timestamp").sort_index()
+
+        # Rééchantillonnage horaire → 15 min
+        # Irradiance : interpolation linéaire (variation douce)
+        # Cloud cover : forward-fill (valeur discrète par heure)
+        df_meteo_15min = df_meteo.resample("15min").interpolate(method="linear")
+        df_meteo_15min["cloud_cover_pct"] = (
+            df_meteo[["cloud_cover_pct"]].resample("15min").ffill()["cloud_cover_pct"]
+        )
+        df_meteo_15min = df_meteo_15min.reset_index()
+        df_meteo_15min = df_meteo_15min.rename(columns={"index": "timestamp"})
+
+        # Jointure sur timestamp (inner join — on ne garde que les instants communs)
+        df_pv["timestamp"] = pd.to_datetime(df_pv["timestamp"], utc=True)
+        df_merged = pd.merge(df_pv, df_meteo_15min, on="timestamp", how="inner")
+        df_merged["p_pv_peak_kw"] = float(site.p_pv_peak_kw)
+
+        fragments.append(df_merged)
+
+    if not fragments:
+        raise InsufficientDataError(
+            "Aucun site avec suffisamment de données PV + météo pour l'entraînement."
+        )
+
+    df = pd.concat(fragments, ignore_index=True).sort_values("timestamp").reset_index(drop=True)
+    df = df.dropna(
+        subset=["production_pv_kw", "irradiance_wm2", "cloud_cover_pct", "temperature_c"]
+    ).reset_index(drop=True)
+
+    if len(df) < 500:
+        raise InsufficientDataError(
+            f"Données PV insuffisantes après jointure : {len(df)} lignes "
+            f"(minimum requis : 500 ~= 5 jours)."
+        )
+
+    split_idx = int(len(df) * 0.8)
+    df_train = df.iloc[:split_idx].reset_index(drop=True)
+    df_val = df.iloc[split_idx:].reset_index(drop=True)
+
+    logger.info(
+        "_load_training_data_pv | lignes_total=%d | train=%d | val=%d",
+        len(df),
+        len(df_train),
+        len(df_val),
+    )
+    return df_train, df_val
 
 
 class InsufficientDataError(Exception):
