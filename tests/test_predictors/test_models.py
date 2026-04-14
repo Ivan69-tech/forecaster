@@ -1,10 +1,11 @@
 """
-Tests de l'interface des modèles de prévision (stub).
+Tests de l'interface des modèles de prévision.
 
-Vérifie que la hiérarchie de classes est correcte et que les stubs
+Vérifie que la hiérarchie de classes est correcte et que les méthodes
 lèvent les bonnes exceptions.
 """
 
+import pandas as pd
 import pytest
 
 from forecaster.predictors.base import BaseForecastModel, ModelNotLoadedError
@@ -24,7 +25,6 @@ def test_pv_production_model_is_base_forecast_model():
 
 def test_consumption_model_predict_raises_not_loaded():
     """predict() doit lever ModelNotLoadedError si le modèle n'est pas chargé."""
-    import pandas as pd
     model = ConsumptionModel(version="test")
     with pytest.raises(ModelNotLoadedError):
         model.predict(pd.DataFrame())
@@ -32,15 +32,6 @@ def test_consumption_model_predict_raises_not_loaded():
 
 def test_pv_production_model_predict_raises_not_loaded():
     """predict() doit lever ModelNotLoadedError si le modèle n'est pas chargé."""
-    import pandas as pd
     model = PVProductionModel(version="test")
     with pytest.raises(ModelNotLoadedError):
         model.predict(pd.DataFrame())
-
-
-def test_pv_model_build_features_raises_not_implemented():
-    """build_features() doit lever NotImplementedError (stub)."""
-    import pandas as pd
-    model = PVProductionModel(version="test")
-    with pytest.raises(NotImplementedError):
-        model.build_features(pd.DataFrame())
