@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from forecaster.config import settings
 from forecaster.db.models import ModelVersion
+from forecaster.exceptions import InsufficientDataError
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,9 @@ def _load_training_data_pv(
 
     sites = session.query(Site).all()
     if not sites:
-        raise InsufficientDataError("Aucun site trouvé en base — impossible d'entraîner le modèle PV.")
+        raise InsufficientDataError(
+            "Aucun site trouvé en base — impossible d'entraîner le modèle PV."
+        )
 
     fragments = []
     for site in sites:
@@ -329,5 +332,4 @@ def _load_training_data_pv(
     return df_train, df_val
 
 
-class InsufficientDataError(Exception):
-    """Levée quand les données d'entraînement sont insuffisantes."""
+__all__ = ["run_training", "run_training_all", "InsufficientDataError"]

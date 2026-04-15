@@ -222,16 +222,18 @@ src/forecaster/
 │   ├── consumption.py    — ConsumptionModel (LightGBM) ✓
 │   └── pv_production.py  — PVProductionModel (LightGBM) ✓
 ├── pipeline/
-│   ├── forecast.py       — orchestration prévision (stub)
+│   ├── forecast.py       — orchestration prévision ✓ (conso + PV)
 │   ├── training.py       — réentraînement LightGBM ✓ (conso + PV)
-│   └── monitoring.py     — calcul MAPE + déclenchement réentraînement (stub)
+│   └── monitoring.py     — calcul MAPE + déclenchement réentraînement ✓
 ├── fetchers/
 │   ├── openmeteo.py      — météo Open-Meteo ✓ (fetch_forecast + fetch_historical)
 │   └── rte.py            — prix spots RTE OAuth2 (stub)
 ├── db/
 │   ├── models.py         — ORM SQLAlchemy (6 tables)
-│   ├── readers.py        — requêtes de lecture DB ✓ (conso + PV)
+│   ├── readers.py        — requêtes de lecture DB ✓
+│   ├── writers.py        — requêtes d'écriture DB ✓ (conso, PV, prix spots)
 │   └── session.py        — engine + SessionLocal
+├── exceptions.py         — exceptions métier centralisées
 ├── scheduler/
 │   └── jobs.py           — 5 jobs APScheduler
 ├── config.py             — Settings Pydantic (.env)
@@ -244,9 +246,21 @@ src/forecaster/
 
 | # | Sujet | Impact |
 |---|-------|--------|
-| 1 | `pipeline/forecast.py` non implémenté — la prévision en prod passe par `scripts/init_demo.py` | Bloquant pour la mise en production |
-| 2 | `fetchers/rte.py` non implémenté — prix spots indisponibles | Bloquant pour l'optimisation L2 |
-| 3 | `pipeline/monitoring.py` non implémenté — pas de réentraînement automatique sur dérive MAPE | Dégradation silencieuse en production |
-| 4 | Température dans `_load_training_data()` (conso) = 0 — à remplacer par l'archive Open-Meteo | Amélioration de précision en hiver/été |
-| 5 | `run_training()` non multi-site — agrège tous les sites | À corriger avant déploiement multi-sites |
-| 6 | Modèle PV demo entraîné sur données synthétiques — sera remplacé dès le 1er réentraînement hebdomadaire (dimanche 02h00) avec données réelles Open-Meteo | Précision initiale limitée, s'améliore automatiquement |
+| 1 | `fetchers/rte.py` non implémenté — prix spots indisponibles. Nécessite OAuth2 client_credentials + parsing API Wholesale Market Data RTE. Ajouter `rte_client_id` et `rte_client_secret` dans `config.py` (actuellement seul `rte_api_token` existe). Le scheduler gère le `NotImplementedError` et log un warning. | Bloquant pour l'optimisation L2 |
+| 2 | Température dans `_load_training_data()` (conso) hardcodée à 0.0 — à remplacer par `fetch_historical()` Open-Meteo (même pattern que `_load_training_data_pv`). | Amélioration de précision en hiver/été |
+| 3 | `run_training()` non multi-site — agrège tous les sites. Ajouter `site_id` en paramètre. | À corriger avant déploiement multi-sites |
+| 4 | Modèle PV demo entraîné sur données synthétiques — sera remplacé dès le 1er réentraînement hebdomadaire (dimanche 02h00) avec données réelles Open-Meteo | Précision initiale limitée, s'améliore automatiquement |
+
+---
+
+## Améliorations futures
+
+| Sujet | Priorité | Description |
+|-------|----------|-------------|
+| **Vacances scolaires** | Basse | `is_school_holiday` est hardcodé à 0 dans `training.py` et `forecast.py`. Intégrer un calendrier (ex : package `vacances-scolaires-france`). |
+| **Réentraînement asynchrone** | Basse | `_trigger_retraining()` dans `monitoring.py` est synchrone et bloque le thread de monitoring. Passer en thread séparé ou job APScheduler immédiat. |
+| **Alertes / notifications** | Moyenne | Pas de mécanisme d'alerte quand la MAPE est haute ou qu'un job échoue (email, Slack, webhook). |
+| **API REST** | Selon besoin | Pas d'API HTTP pour interroger les prévisions — le L2 lit directement la DB. À ajouter si un autre consommateur en a besoin. |
+| **Health check** | Moyenne | Pas d'endpoint `/health` pour le monitoring infrastructure (utile pour Docker / Kubernetes). |
+| **Lags température J-1/J-7** | Basse | Dans `pipeline/forecast.py`, les lags température sont à 0.0. Intégrer l'archive Open-Meteo pour les calculer. |
+| **`base.py` save/load abstraits** | Basse | `BaseForecastModel.save()` et `load()` lèvent `NotImplementedError` alors que les sous-classes les implémentent. Les marquer `@abstractmethod`. |
