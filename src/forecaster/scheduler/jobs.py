@@ -98,6 +98,7 @@ def _job_daily_forecast_48h() -> None:
     logger.info("job | daily_forecast_48h | démarrage")
     with SessionLocal() as session:
         run_forecast_all_sites(session, horizon_h=48)
+        session.commit()
     logger.info("job | daily_forecast_48h | terminé")
 
 
@@ -127,6 +128,7 @@ def _job_intraday_forecast_24h() -> None:
     logger.info("job | intraday_forecast_24h | démarrage")
     with SessionLocal() as session:
         run_forecast_all_sites(session, horizon_h=24)
+        session.commit()
     logger.info("job | intraday_forecast_24h | terminé")
 
 
@@ -134,6 +136,7 @@ def _job_weekly_retraining() -> None:
     logger.info("job | weekly_retraining | démarrage")
     with SessionLocal() as session:
         results = run_training_all(session)
+        session.commit()
     logger.info("job | weekly_retraining | résultats MAPE : %s", results)
 
 
@@ -141,4 +144,5 @@ def _job_mape_monitoring() -> None:
     logger.info("job | mape_monitoring | démarrage")
     with SessionLocal() as session:
         check_mape_all_sites(session)
+        session.commit()
     logger.info("job | mape_monitoring | terminé")
