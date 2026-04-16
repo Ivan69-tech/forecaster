@@ -103,25 +103,43 @@ def _job_daily_forecast_48h() -> None:
 
 
 def _job_fetch_spot_prices() -> None:
-    """
-    Récupère les prix spots RTE pour J+1 et les persiste en base.
-
-    TODO:
-        - Appeler fetchers.rte.fetch_spot_prices(tomorrow)
-        - Persister dans forecasts_prix_spot pour chaque site actif
-    """
-    from forecaster.fetchers.rte import fetch_spot_prices
+    """Récupère les prix spots RTE pour J+1 et les persiste en base pour chaque site."""
+    from forecaster.db.readers import get_all_sites
+    from forecaster.db.writers import write_spot_prices
+    from forecaster.fetchers.rte import RTEDataUnavailable, fetch_spot_prices
 
     tomorrow = date.today() + timedelta(days=1)
     logger.info("job | fetch_spot_prices | date=%s | démarrage", tomorrow)
+
     try:
         rows = fetch_spot_prices(tomorrow)
-        # TODO: persister rows en base pour chaque site
         logger.info("job | fetch_spot_prices | %d entrées récupérées", len(rows))
-    except NotImplementedError:
-        logger.warning("job | fetch_spot_prices | non implémenté")
+    except RTEDataUnavailable:
+        logger.warning(
+            "job | fetch_spot_prices | données non disponibles pour %s", tomorrow
+        )
+        return
     except Exception:
-        logger.exception("job | fetch_spot_prices | erreur")
+        logger.exception("job | fetch_spot_prices | erreur lors de la récupération")
+        return
+
+    with SessionLocal() as session:
+        sites = get_all_sites(session)
+        for site in sites:
+            try:
+                n = write_spot_prices(session, site.site_id, rows)
+                logger.info(
+                    "job | fetch_spot_prices | site=%s | %d prix écrits",
+                    site.site_id,
+                    n,
+                )
+            except Exception:
+                logger.exception(
+                    "job | fetch_spot_prices | site=%s | erreur écriture", site.site_id
+                )
+        session.commit()
+
+    logger.info("job | fetch_spot_prices | terminé")
 
 
 def _job_intraday_forecast_24h() -> None:

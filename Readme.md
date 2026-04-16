@@ -14,7 +14,7 @@ production PV, consommées par le Service d'Optimisation (L2).
 |-----------|--------|-----|---------|
 | **Consommation électrique** | LightGBM (`ConsumptionModel`) | 15 min | 48 h |
 | **Production PV** | LightGBM (`PVProductionModel`) | 15 min | 48 h |
-| Prix spot RTE *(à venir)* | Fetcher RTE | 1 h | J+1 |
+| **Prix spot RTE** | Fetcher RTE (OAuth2) | 1 h | J+1 |
 
 Le modèle de **consommation** utilise les features suivantes :
 - **Temporelles** : heure, jour de semaine, mois (encodage sin/cos cyclique), week-end
@@ -40,6 +40,7 @@ PostgreSQL (mesures_reelles) ───────┤
                                     ├─→ PVProductionModel (LightGBM) ──→ forecasts_production_pv
 API Open-Meteo (archive météo)  ───┘
                                               ↑
+API RTE (prix spots OAuth2)  ──────────────────────────────────────→ forecasts_prix_spot
                                     scheduler/jobs.py (APScheduler)
 
 mesures_reelles ──→ pipeline/monitoring.py ──→ pipeline/training.py
@@ -155,7 +156,8 @@ Copier `.env.example` → `.env` et renseigner les valeurs :
 | Variable | Défaut | Description |
 |----------|--------|-------------|
 | `DATABASE_URL` | `postgresql://forecaster:forecaster@localhost:5432/forecaster` | URL de connexion PostgreSQL |
-| `RTE_API_TOKEN` | *(vide)* | Token OAuth2 RTE (non requis si le fetcher n'est pas utilisé) |
+| `RTE_CLIENT_ID` | *(vide)* | Client ID OAuth2 RTE |
+| `RTE_CLIENT_SECRET` | *(vide)* | Client Secret OAuth2 RTE |
 | `OPENMETEO_BASE_URL` | `https://api.open-meteo.com/v1` | URL de base Open-Meteo (pas de clé requise) |
 | `MODELS_DIR` | `/data/models` | Répertoire de stockage des artefacts LightGBM |
 | `MAPE_THRESHOLD` | `15.0` | Seuil MAPE (%) déclenchant un réentraînement automatique |
@@ -227,7 +229,7 @@ src/forecaster/
 │   └── monitoring.py     — calcul MAPE + déclenchement réentraînement ✓
 ├── fetchers/
 │   ├── openmeteo.py      — météo Open-Meteo ✓ (fetch_forecast + fetch_historical)
-│   └── rte.py            — prix spots RTE OAuth2 (stub)
+│   └── rte.py            — prix spots RTE ✓ (fetch_spot_prices via OAuth2 Wholesale Market v3)
 ├── db/
 │   ├── models.py         — ORM SQLAlchemy (6 tables)
 │   ├── readers.py        — requêtes de lecture DB ✓
@@ -246,10 +248,9 @@ src/forecaster/
 
 | # | Sujet | Impact |
 |---|-------|--------|
-| 1 | `fetchers/rte.py` non implémenté — prix spots indisponibles. Nécessite OAuth2 client_credentials + parsing API Wholesale Market Data RTE. Ajouter `rte_client_id` et `rte_client_secret` dans `config.py` (actuellement seul `rte_api_token` existe). Le scheduler gère le `NotImplementedError` et log un warning. | Bloquant pour l'optimisation L2 |
-| 2 | Température dans `_load_training_data()` (conso) hardcodée à 0.0 — à remplacer par `fetch_historical()` Open-Meteo (même pattern que `_load_training_data_pv`). | Amélioration de précision en hiver/été |
-| 3 | `run_training()` non multi-site — agrège tous les sites. Ajouter `site_id` en paramètre. | À corriger avant déploiement multi-sites |
-| 4 | Modèle PV demo entraîné sur données synthétiques — sera remplacé dès le 1er réentraînement hebdomadaire (dimanche 02h00) avec données réelles Open-Meteo | Précision initiale limitée, s'améliore automatiquement |
+| 1 | Température dans `_load_training_data()` (conso) hardcodée à 0.0 — à remplacer par `fetch_historical()` Open-Meteo (même pattern que `_load_training_data_pv`). | Amélioration de précision en hiver/été |
+| 2 | `run_training()` non multi-site — agrège tous les sites. Ajouter `site_id` en paramètre. | À corriger avant déploiement multi-sites |
+| 3 | Modèle PV demo entraîné sur données synthétiques — sera remplacé dès le 1er réentraînement hebdomadaire (dimanche 02h00) avec données réelles Open-Meteo | Précision initiale limitée, s'améliore automatiquement |
 
 ---
 

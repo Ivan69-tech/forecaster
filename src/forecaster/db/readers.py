@@ -17,7 +17,18 @@ from forecaster.db.models import (
     ModelVersion,
     PVProductionForecast,
     RealMeasure,
+    Site,
 )
+
+
+def get_all_sites(session: Session) -> list[Site]:
+    """
+    Lecture de sites — tous les sites enregistrés, triés par site_id.
+
+    Returns:
+        Liste de tous les objets Site.
+    """
+    return session.query(Site).order_by(Site.site_id).all()
 
 
 def get_mesures_reelles_consommation(

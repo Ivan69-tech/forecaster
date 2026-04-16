@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://forecaster:forecaster@localhost:5432/forecaster"
 
     # API RTE
-    rte_api_token: str = ""
+    rte_client_id: str = ""
+    rte_client_secret: str = ""
 
     # API Open-Meteo (pas de clé requise)
     openmeteo_base_url: str = "https://api.open-meteo.com/v1"
