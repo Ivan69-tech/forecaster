@@ -103,13 +103,22 @@ docker compose logs -f forecast-init
 
 Ouvre **http://localhost:3000** — aucun login requis (mode anonyme Admin).
 
-Le dashboard **"Prévisions de Consommation"** est automatiquement provisionné :
+Deux dashboards sont automatiquement provisionnés :
 
+**"Prévisions de Consommation"**
 - **Courbe 48h** — prévision LightGBM sur `maintenant → +48h`
 - **Stat — Prochaine heure** — puissance moyenne prévue (kW)
 - **Stat — Pic 48h** — puissance maximale prévue (kW)
 - **Stat — Version modèle** — version + MAPE de validation
 - **Tableau** — détail au pas 15 min pour les 6 prochaines heures
+
+**"Prix Spots France"**
+- **Courbe 48h** — prix EPEX Spot France en escalier (€/MWh), gradient vert→rouge selon le niveau
+- **Stat — Prix heure en cours** — prix du pas horaire actif, coloré par seuil
+- **Stat — Prix min 24h** — meilleur prix d'achat sur les prochaines 24h (charge BESS)
+- **Stat — Prix max 24h** — meilleur prix de vente sur les prochaines 24h (décharge BESS)
+- **Stat — Creux 24h** — heure locale Paris du prix minimum (fenêtre de charge optimale)
+- **Tableau** — détail horaire des 24 prochaines heures avec coloration par niveau de prix
 
 ### Commandes utiles
 
