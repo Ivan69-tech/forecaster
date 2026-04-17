@@ -40,19 +40,13 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    environment:
-      DATABASE_URL: postgresql://forecaster:forecaster@postgres:5432/forecaster
-      MODELS_DIR: /data/models
-      MAPE_THRESHOLD: "15.0"
-      LOG_LEVEL: INFO
-      RTE_API_TOKEN: ""
+    env_file:
+      - ../.env
     volumes:
       - ./models_data:/data/models
     depends_on:
       postgres:
         condition: service_healthy
-      forecast-init:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   # ── Grafana — visualisation des prévisions ────────────────────────────────────

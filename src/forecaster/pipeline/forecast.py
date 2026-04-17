@@ -73,14 +73,17 @@ def run_forecast(session: Session, site_id: str, horizon_h: int = 48) -> None:
     )
 
 
-def run_forecast_all_sites(session: Session, horizon_h: int = 48) -> None:
-    """Lance run_forecast() pour tous les sites enregistrés en base."""
+def run_forecast_all_sites(session: Session, horizon_h: int = 48) -> list[str]:
+    """Lance run_forecast() pour tous les sites. Retourne la liste des site_id en échec."""
     sites = session.query(Site).all()
+    failed: list[str] = []
     for site in sites:
         try:
             run_forecast(session, site.site_id, horizon_h)
         except Exception:
             logger.exception("run_forecast | site=%s | échec", site.site_id)
+            failed.append(site.site_id)
+    return failed
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +180,25 @@ def _predict_pv(
         )
 
     model = PVProductionModel(version=model_version.version)
-    model.load(Path(model_version.chemin_artefact))
+    try:
+        model.load(Path(model_version.chemin_artefact))
+    except FileNotFoundError:
+        logger.warning(
+            "_predict_pv | site=%s | artefact introuvable (%s) — réentraînement",
+            site.site_id,
+            model_version.chemin_artefact,
+        )
+        from forecaster.pipeline.training import run_training
+
+        run_training(session, "pv_production")
+        session.flush()
+        model_version = get_active_model_version(session, "pv_production")
+        if model_version is None:
+            raise ForecastUnavailableError(
+                f"Aucun modèle pv_production actif après réentraînement pour '{site.site_id}'."
+            )
+        model = PVProductionModel(version=model_version.version)
+        model.load(Path(model_version.chemin_artefact))
 
     now = datetime.now(tz=UTC)
     freq = pd.Timedelta(minutes=15)

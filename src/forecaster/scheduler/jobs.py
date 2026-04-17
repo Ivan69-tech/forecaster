@@ -97,8 +97,10 @@ def build_scheduler() -> BlockingScheduler:
 def _job_daily_forecast_48h() -> None:
     logger.info("job | daily_forecast_48h | démarrage")
     with SessionLocal() as session:
-        run_forecast_all_sites(session, horizon_h=48)
+        failed = run_forecast_all_sites(session, horizon_h=48)
         session.commit()
+    if failed:
+        raise RuntimeError(f"Prévisions 48h échouées pour les sites : {failed}")
     logger.info("job | daily_forecast_48h | terminé")
 
 
@@ -145,17 +147,21 @@ def _job_fetch_spot_prices() -> None:
 def _job_intraday_forecast_24h() -> None:
     logger.info("job | intraday_forecast_24h | démarrage")
     with SessionLocal() as session:
-        run_forecast_all_sites(session, horizon_h=24)
+        failed = run_forecast_all_sites(session, horizon_h=24)
         session.commit()
+    if failed:
+        raise RuntimeError(f"Prévisions 24h échouées pour les sites : {failed}")
     logger.info("job | intraday_forecast_24h | terminé")
 
 
 def _job_weekly_retraining() -> None:
     logger.info("job | weekly_retraining | démarrage")
     with SessionLocal() as session:
-        results = run_training_all(session)
+        report = run_training_all(session)
         session.commit()
-    logger.info("job | weekly_retraining | résultats MAPE : %s", results)
+    logger.info("job | weekly_retraining | résultats MAPE : %s", report.results)
+    if report.failures:
+        raise RuntimeError(f"Entraînement échoué pour les modèles : {report.failures}")
 
 
 def _job_mape_monitoring() -> None:

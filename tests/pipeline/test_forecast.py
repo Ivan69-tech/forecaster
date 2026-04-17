@@ -323,12 +323,11 @@ def test_run_forecast_site_inexistant_leve_erreur(db_session: Session) -> None:
 def test_run_forecast_all_sites_continue_sur_erreur(
     db_session: Session, site_forecast: Site
 ) -> None:
-    """run_forecast_all_sites() ne plante pas si un site échoue."""
-    # Pas de modèle actif → chaque site va échouer, mais la boucle continue
+    """run_forecast_all_sites() continue malgré un site en erreur et retourne les échecs."""
     with patch(
         "forecaster.pipeline.forecast.fetch_forecast",
         side_effect=Exception("API indisponible"),
     ):
-        run_forecast_all_sites(db_session, horizon_h=24)
+        failed = run_forecast_all_sites(db_session, horizon_h=24)
 
-    # Pas de crash — le test passe si on arrive ici
+    assert failed == [site_forecast.site_id]

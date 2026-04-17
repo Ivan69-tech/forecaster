@@ -10,6 +10,7 @@ Chaque modèle entraîné est versionné dans la table modeles_versions.
 """
 
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +25,14 @@ from forecaster.exceptions import InsufficientDataError
 logger = logging.getLogger(__name__)
 
 MODEL_TYPES = ("consumption", "pv_production")
+
+
+@dataclass
+class TrainingReport:
+    """Résultat de run_training_all() : succès et échecs par type de modèle."""
+
+    results: dict[str, float] = field(default_factory=dict)
+    failures: list[str] = field(default_factory=list)
 TRAINING_WINDOW_DAYS = 90  # §3.4 — 90 derniers jours
 
 
@@ -77,15 +86,16 @@ def run_training(session: Session, model_type: str) -> float:
     return mape
 
 
-def run_training_all(session: Session) -> dict[str, float]:
-    """Réentraîne tous les modèles. Retourne {model_type: mape}."""
-    results = {}
+def run_training_all(session: Session) -> TrainingReport:
+    """Réentraîne tous les modèles. Retourne un TrainingReport avec succès et échecs."""
+    report = TrainingReport()
     for model_type in MODEL_TYPES:
         try:
-            results[model_type] = run_training(session, model_type)
+            report.results[model_type] = run_training(session, model_type)
         except Exception:
             logger.exception("run_training | model=%s | échec", model_type)
-    return results
+            report.failures.append(model_type)
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -296,8 +306,13 @@ def _load_training_data_pv(
         df_meteo_15min = df_meteo_15min.reset_index()
         df_meteo_15min = df_meteo_15min.rename(columns={"index": "timestamp"})
 
+        # Arrondir les timestamps PV au pas de 15 min pour s'aligner sur la grille météo.
+        # Les mesures terrain (5 min) ou les historiques décalés (init_demo) ne tombent
+        # pas forcément sur :00/:15/:30/:45 UTC — sans arrondi la jointure donne 0 ligne.
+        df_pv["timestamp"] = pd.to_datetime(df_pv["timestamp"], utc=True).dt.round("15min")
+        df_pv = df_pv.groupby("timestamp", as_index=False)["production_pv_kw"].mean()
+
         # Jointure sur timestamp (inner join — on ne garde que les instants communs)
-        df_pv["timestamp"] = pd.to_datetime(df_pv["timestamp"], utc=True)
         df_merged = pd.merge(df_pv, df_meteo_15min, on="timestamp", how="inner")
         df_merged["p_pv_peak_kw"] = float(site.p_pv_peak_kw)
 
