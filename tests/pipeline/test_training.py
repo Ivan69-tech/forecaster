@@ -23,6 +23,8 @@ from forecaster.pipeline.training import (
 
 CSV_PATH = Path(__file__).parent.parent / "fixtures" / "load_history_2025.csv"
 
+SITE_ID_TEST = "site-training-test"
+
 # Nombre de lignes à insérer en DB pour les tests de pipeline
 # Les lags 7j nécessitent 672 pas de "warm-up".
 # 1200 lignes → 1200 - 672 = 528 lignes utiles > seuil 500 ✓
@@ -123,7 +125,7 @@ def test_load_training_data_retourne_deux_dataframes(
 ) -> None:
     """_load_training_data() retourne un tuple (df_train, df_val) non vides."""
     cutoff = datetime(2020, 1, 1, tzinfo=UTC)
-    df_train, df_val = _load_training_data(db_avec_donnees_suffisantes, "consumption", cutoff)
+    df_train, df_val = _load_training_data(db_avec_donnees_suffisantes, "consumption", cutoff, SITE_ID_TEST)
 
     assert isinstance(df_train, pd.DataFrame)
     assert isinstance(df_val, pd.DataFrame)
@@ -136,7 +138,7 @@ def test_load_training_data_split_chronologique(
 ) -> None:
     """Le split est chronologique : tous les timestamps de train < timestamps de val."""
     cutoff = datetime(2020, 1, 1, tzinfo=UTC)
-    df_train, df_val = _load_training_data(db_avec_donnees_suffisantes, "consumption", cutoff)
+    df_train, df_val = _load_training_data(db_avec_donnees_suffisantes, "consumption", cutoff, SITE_ID_TEST)
 
     ts_train_max = df_train["timestamp"].max()
     ts_val_min = df_val["timestamp"].min()
@@ -148,7 +150,7 @@ def test_load_training_data_contient_colonnes_contexte(
 ) -> None:
     """Le DataFrame retourné contient toutes les colonnes attendues par build_features()."""
     cutoff = datetime(2020, 1, 1, tzinfo=UTC)
-    df_train, _ = _load_training_data(db_avec_donnees_suffisantes, "consumption", cutoff)
+    df_train, _ = _load_training_data(db_avec_donnees_suffisantes, "consumption", cutoff, SITE_ID_TEST)
 
     colonnes_attendues = [
         "timestamp", "conso_kw",
@@ -166,7 +168,7 @@ def test_load_training_data_leve_erreur_si_donnees_insuffisantes(
     """_load_training_data() lève InsufficientDataError avec trop peu de données."""
     cutoff = datetime(2020, 1, 1, tzinfo=UTC)
     with pytest.raises(InsufficientDataError):
-        _load_training_data(db_avec_donnees_insuffisantes, "consumption", cutoff)
+        _load_training_data(db_avec_donnees_insuffisantes, "consumption", cutoff, SITE_ID_TEST)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +179,7 @@ def test_load_training_data_leve_erreur_si_donnees_insuffisantes(
 def test_run_training_leve_erreur_sur_type_invalide(db_session: Session) -> None:
     """run_training() lève ValueError pour un model_type inconnu."""
     with pytest.raises(ValueError, match="model_type invalide"):
-        run_training(db_session, "invalid_model")
+        run_training(db_session, "invalid_model", "site-test")
 
 
 def test_run_training_consumption_enregistre_version(
@@ -194,14 +196,14 @@ def test_run_training_consumption_enregistre_version(
     from forecaster import config as cfg
     monkeypatch.setattr(cfg.settings, "models_dir", tmp_path)
 
-    mape = run_training(db_avec_donnees_recentes, "consumption")
+    mape = run_training(db_avec_donnees_recentes, "consumption", SITE_ID_TEST)
 
     assert isinstance(mape, float)
     assert mape >= 0.0
 
     versions = (
         db_avec_donnees_recentes.query(ModelVersion)
-        .filter_by(type_modele="consumption", actif=True)
+        .filter_by(type_modele="consumption", actif=True, site_id=SITE_ID_TEST)
         .all()
     )
     assert len(versions) == 1

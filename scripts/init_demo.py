@@ -1,16 +1,20 @@
 """
-Script d'initialisation pour la démo locale.
+Script d'initialisation pour la démo locale (multi-sites).
 
 Exécuté une seule fois par le service `forecast-init` au démarrage.
 Idempotent : peut être relancé sans erreur si les données existent déjà.
 
-Étapes :
+Sites créés :
+  - site-demo-01 : Site Industriel Demo (Toulouse, 300 kWc PV)
+  - site-demo-02 : Entrepôt Logistique Demo (Lyon, 150 kWc PV)
+
+Étapes exécutées pour chaque site :
   1. Création du schéma DB (Base.metadata.create_all)
-  2. Insertion d'un site de démonstration
-  3. Chargement de 100 jours de données historiques synthétiques (CSV)
+  2. Insertion du site
+  3. Chargement de 100 jours de données historiques (CSV ou synthétique)
   3b. Ajout de la production PV synthétique sur l'historique
-  4. Entraînement du ConsumptionModel via run_training()
-  4b. Entraînement du PVProductionModel sur les données synthétiques
+  4. Entraînement du ConsumptionModel (per-site)
+  4b. Entraînement du PVProductionModel (per-site, données synthétiques)
   5. Génération de la prévision consommation 48h
   5b. Génération de la prévision production PV 48h (via Open-Meteo)
 """
@@ -21,7 +25,7 @@ import logging
 import math
 import sys
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import holidays
@@ -32,13 +36,33 @@ from sqlalchemy import func, text
 # Chemin du CSV synthétique (copié dans l'image Docker)
 CSV_PATH = Path(__file__).parent.parent / "data" / "load_history_2025.csv"
 
-# Paramètres du site de démonstration
-SITE_ID = "site-demo-01"
-SITE_NOM = "Site Industriel Demo"
-SITE_LAT = 43.6047   # Toulouse
-SITE_LON = 1.4442
-SITE_PV_PEAK_KW = 300.0
 N_JOURS_HISTORIQUE = 100  # jours de données insérées en DB
+
+# Paramètres des sites de démonstration
+SITES = [
+    {
+        "site_id": "site-demo-01",
+        "nom": "Site Industriel Demo",
+        "latitude": 43.6047,    # Toulouse
+        "longitude": 1.4442,
+        "p_pv_peak_kw": 300.0,
+        "capacite_bess_kwh": 500.0,
+        "p_max_bess_kw": 250.0,
+        "p_souscrite_kw": 700.0,
+        "source_conso": "csv",
+    },
+    {
+        "site_id": "site-demo-02",
+        "nom": "Entrepôt Logistique Demo",
+        "latitude": 45.7640,    # Lyon
+        "longitude": 4.8357,
+        "p_pv_peak_kw": 150.0,
+        "capacite_bess_kwh": 250.0,
+        "p_max_bess_kw": 125.0,
+        "p_souscrite_kw": 400.0,
+        "source_conso": "synthetic",
+    },
+]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,30 +98,31 @@ def attendre_db(engine, tentatives: int = 30, delai_s: float = 2.0) -> None:
 # ---------------------------------------------------------------------------
 
 
-def inserer_site_si_absent(session) -> None:
-    """Insère le site de démonstration s'il n'existe pas encore."""
+def inserer_site_si_absent(session, site: dict) -> None:
+    """Insère un site de démonstration s'il n'existe pas encore."""
     from forecaster.db.models import Site
 
-    existant = session.query(Site).filter_by(site_id=SITE_ID).first()
+    site_id = site["site_id"]
+    existant = session.query(Site).filter_by(site_id=site_id).first()
     if existant:
-        logger.info("Site '%s' déjà présent — skip", SITE_ID)
+        logger.info("Site '%s' déjà présent — skip", site_id)
         return
 
-    site = Site(
-        site_id=SITE_ID,
-        nom=SITE_NOM,
-        capacite_bess_kwh=500.0,
-        p_max_bess_kw=250.0,
-        p_pv_peak_kw=SITE_PV_PEAK_KW,
-        p_souscrite_kw=700.0,
+    db_site = Site(
+        site_id=site_id,
+        nom=site["nom"],
+        capacite_bess_kwh=site["capacite_bess_kwh"],
+        p_max_bess_kw=site["p_max_bess_kw"],
+        p_pv_peak_kw=site["p_pv_peak_kw"],
+        p_souscrite_kw=site["p_souscrite_kw"],
         soc_min_pct=10.0,
         soc_max_pct=90.0,
-        latitude=SITE_LAT,
-        longitude=SITE_LON,
+        latitude=site["latitude"],
+        longitude=site["longitude"],
     )
-    session.add(site)
+    session.add(db_site)
     session.commit()
-    logger.info("Site '%s' inséré", SITE_ID)
+    logger.info("Site '%s' inséré", site_id)
 
 
 # ---------------------------------------------------------------------------
@@ -105,26 +130,31 @@ def inserer_site_si_absent(session) -> None:
 # ---------------------------------------------------------------------------
 
 
-def charger_historique_si_absent(session) -> pd.DataFrame:
+def charger_historique_si_absent(session, site: dict) -> pd.DataFrame:
     """
-    Charge N_JOURS_HISTORIQUE jours de données dans mesures_reelles.
+    Charge N_JOURS_HISTORIQUE jours de données dans mesures_reelles pour un site.
 
-    Les timestamps du CSV sont recalés pour se terminer à maintenant - 15 min,
-    ce qui permet d'utiliser la fenêtre glissante de 90 jours pour l'entraînement.
+    - Si source_conso == "csv" : lit le fichier CSV existant.
+    - Si source_conso == "synthetic" : génère un profil entrepôt synthétique.
+
+    Les timestamps sont recalés pour se terminer à maintenant - 15 min.
     Retourne le DataFrame chargé (utilisé ensuite pour calculer les lags).
     """
     from forecaster.db.models import RealMeasure
 
-    n_existant = session.query(RealMeasure).filter_by(site_id=SITE_ID).count()
+    site_id = site["site_id"]
+    n_existant = session.query(RealMeasure).filter_by(site_id=site_id).count()
     n_lignes = N_JOURS_HISTORIQUE * 96  # 96 pas de 15 min par jour
 
     if n_existant >= n_lignes:
         logger.info(
-            "Historique déjà présent (%d lignes) — rechargement DataFrame", n_existant
+            "Historique site '%s' déjà présent (%d lignes) — rechargement DataFrame",
+            site_id,
+            n_existant,
         )
         rows = (
             session.query(RealMeasure.timestamp, RealMeasure.conso_kw)
-            .filter_by(site_id=SITE_ID)
+            .filter_by(site_id=site_id)
             .order_by(RealMeasure.timestamp)
             .all()
         )
@@ -132,20 +162,37 @@ def charger_historique_si_absent(session) -> pd.DataFrame:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         return df
 
-    logger.info("Chargement de %d jours de données historiques…", N_JOURS_HISTORIQUE)
-
-    df = pd.read_csv(CSV_PATH, parse_dates=["timestamp"], nrows=n_lignes)
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    logger.info(
+        "Chargement de %d jours de données historiques pour '%s'…",
+        N_JOURS_HISTORIQUE,
+        site_id,
+    )
 
     # Recalage : la dernière mesure est à maintenant - 15 min
     now = datetime.now(tz=UTC)
     fin_souhaitee = now - pd.Timedelta(minutes=15)
-    decalage = fin_souhaitee - df["timestamp"].iloc[-1]
-    df["timestamp"] = df["timestamp"] + decalage
+
+    if site["source_conso"] == "csv":
+        df = pd.read_csv(CSV_PATH, parse_dates=["timestamp"], nrows=n_lignes)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+        decalage = fin_souhaitee - df["timestamp"].iloc[-1]
+        df["timestamp"] = df["timestamp"] + decalage
+    else:
+        # Génération synthétique d'un profil entrepôt logistique
+        freq = pd.Timedelta(minutes=15)
+        timestamps = pd.date_range(
+            end=fin_souhaitee,
+            periods=n_lignes,
+            freq=freq,
+            tz="UTC",
+        )
+        rng = np.random.default_rng(seed=43)
+        consos = _generer_conso_entrepot(timestamps, rng)
+        df = pd.DataFrame({"timestamp": timestamps, "conso_kw": consos})
 
     mesures = [
         RealMeasure(
-            site_id=SITE_ID,
+            site_id=site_id,
             timestamp=row["timestamp"].to_pydatetime(),
             conso_kw=float(row["conso_kw"]),
             production_pv_kw=0.0,
@@ -157,8 +204,35 @@ def charger_historique_si_absent(session) -> pd.DataFrame:
     ]
     session.bulk_save_objects(mesures)
     session.commit()
-    logger.info("%d mesures insérées dans mesures_reelles", len(mesures))
+    logger.info("%d mesures insérées dans mesures_reelles pour '%s'", len(mesures), site_id)
     return df
+
+
+def _generer_conso_entrepot(
+    timestamps: pd.DatetimeIndex, rng: np.random.Generator
+) -> list[float]:
+    """
+    Génère une série de consommation synthétique pour un entrepôt logistique.
+
+    Profil : base 120 kW, +80 kW heures ouvrées (8h-18h, lun-ven),
+    −40 kW week-end. Bruit gaussien ±5 %.
+    Les timestamps sont en UTC — on approxime l'heure locale avec UTC+1.
+    """
+    consos = []
+    for ts in timestamps:
+        hour_local = (ts.hour + 1) % 24  # approximation UTC → Paris (hiver)
+        jour_semaine = ts.weekday()  # 0=lundi, 6=dimanche
+
+        if jour_semaine < 5 and 8 <= hour_local < 18:
+            base = 200.0  # heures ouvrées semaine
+        elif jour_semaine >= 5:
+            base = 80.0   # week-end
+        else:
+            base = 120.0  # nuit semaine
+
+        noise = float(rng.normal(1.0, 0.05))
+        consos.append(max(0.0, base * noise))
+    return consos
 
 
 # ---------------------------------------------------------------------------
@@ -166,9 +240,9 @@ def charger_historique_si_absent(session) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
+def ajouter_production_pv_synthetique(session, site: dict) -> pd.DataFrame:
     """
-    Calcule la production PV synthétique pour l'historique existant et met à
+    Calcule la production PV synthétique pour l'historique existant du site et met à
     jour mesures_reelles.production_pv_kw.
 
     Modèle synthétique :
@@ -181,22 +255,28 @@ def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
     """
     from forecaster.db.models import RealMeasure
 
+    site_id = site["site_id"]
+    latitude = site["latitude"]
+    p_pv_peak_kw = site["p_pv_peak_kw"]
+
     # Vérifier si la production PV est déjà renseignée (idempotence)
     somme = (
         session.query(func.sum(RealMeasure.production_pv_kw))
-        .filter_by(site_id=SITE_ID)
+        .filter_by(site_id=site_id)
         .scalar()
     )
     if somme and somme > 0:
         logger.info(
-            "Production PV déjà présente (somme=%.1f kW·pas) — rechargement", somme
+            "Production PV site '%s' déjà présente (somme=%.1f kW·pas) — rechargement",
+            site_id,
+            somme,
         )
         rows = (
             session.query(
                 RealMeasure.timestamp,
                 RealMeasure.production_pv_kw,
             )
-            .filter_by(site_id=SITE_ID)
+            .filter_by(site_id=site_id)
             .order_by(RealMeasure.timestamp)
             .all()
         )
@@ -209,7 +289,7 @@ def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
         df_synth = pd.DataFrame({
             "timestamp": pd.to_datetime(timestamps, utc=True),
             "irradiance_wm2": [
-                _irradiance_clear_sky(SITE_LAT, ts) for ts in timestamps
+                _irradiance_clear_sky(latitude, ts) for ts in timestamps
             ],
             "cloud_cover_pct": cloud_covers,
             "temperature_c": [_temperature_synthetique(ts) for ts in timestamps],
@@ -217,11 +297,11 @@ def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
         })
         return df_synth
 
-    logger.info("Génération de la production PV synthétique…")
+    logger.info("Génération de la production PV synthétique pour '%s'…", site_id)
 
     rows = (
         session.query(RealMeasure.id, RealMeasure.timestamp)
-        .filter_by(site_id=SITE_ID)
+        .filter_by(site_id=site_id)
         .order_by(RealMeasure.timestamp)
         .all()
     )
@@ -233,10 +313,10 @@ def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
     meteo_lignes = []
     for i, (row_id, ts) in enumerate(rows):
         ts_utc = ts.replace(tzinfo=UTC) if ts.tzinfo is None else ts
-        irradiance = _irradiance_clear_sky(SITE_LAT, ts_utc)
+        irradiance = _irradiance_clear_sky(latitude, ts_utc)
         cloud_cover = cloud_covers[i]
         temperature = _temperature_synthetique(ts_utc)
-        production = _production_pv(irradiance, cloud_cover, temperature, SITE_PV_PEAK_KW, rng)
+        production = _production_pv(irradiance, cloud_cover, temperature, p_pv_peak_kw, rng)
 
         # float() obligatoire : np.float64 n'est pas sérialisable par psycopg2
         mappings.append({"id": row_id, "production_pv_kw": float(production)})
@@ -251,7 +331,9 @@ def ajouter_production_pv_synthetique(session) -> pd.DataFrame:
     session.bulk_update_mappings(RealMeasure, mappings)
     session.commit()
     logger.info(
-        "%d mesures mises à jour avec production PV synthétique", len(mappings)
+        "%d mesures mises à jour avec production PV synthétique pour '%s'",
+        len(mappings),
+        site_id,
     )
 
     df_synth = pd.DataFrame(meteo_lignes)
@@ -356,9 +438,9 @@ def _production_pv(
 # ---------------------------------------------------------------------------
 
 
-def entrainer_modele_si_absent(session) -> str:
+def entrainer_modele_si_absent(session, site_id: str) -> str:
     """
-    Entraîne le ConsumptionModel si aucune version active n'existe.
+    Entraîne le ConsumptionModel pour un site si aucune version active n'existe.
     Retourne le chemin de l'artefact.
     """
     from forecaster.db.models import ModelVersion
@@ -366,19 +448,20 @@ def entrainer_modele_si_absent(session) -> str:
 
     version_active = (
         session.query(ModelVersion)
-        .filter_by(type_modele="consumption", actif=True)
+        .filter_by(type_modele="consumption", actif=True, site_id=site_id)
         .first()
     )
     if version_active:
         logger.info(
-            "Modèle actif déjà présent (version=%s, MAPE=%.2f%%) — skip entraînement",
+            "Modèle consumption site '%s' déjà présent (version=%s, MAPE=%.2f%%) — skip",
+            site_id,
             version_active.version,
             version_active.mape_validation or 0.0,
         )
         return version_active.chemin_artefact
 
-    logger.info("Entraînement ConsumptionModel…")
-    mape = run_training(session, "consumption")
+    logger.info("Entraînement ConsumptionModel pour '%s'…", site_id)
+    mape = run_training(session, "consumption", site_id)
     # flush() nécessaire : SessionLocal a autoflush=False, la ligne ModelVersion
     # insérée par run_training() n'est pas encore visible pour la requête suivante.
     session.flush()
@@ -386,7 +469,7 @@ def entrainer_modele_si_absent(session) -> str:
 
     version_active = (
         session.query(ModelVersion)
-        .filter_by(type_modele="consumption", actif=True)
+        .filter_by(type_modele="consumption", actif=True, site_id=site_id)
         .first()
     )
     return version_active.chemin_artefact
@@ -397,10 +480,12 @@ def entrainer_modele_si_absent(session) -> str:
 # ---------------------------------------------------------------------------
 
 
-def entrainer_modele_pv_si_absent(session, df_synthetique: pd.DataFrame) -> str:
+def entrainer_modele_pv_si_absent(
+    session, site_id: str, df_synthetique: pd.DataFrame, p_pv_peak_kw: float
+) -> str:
     """
-    Entraîne le PVProductionModel sur les données synthétiques si aucune version
-    active n'existe. Retourne le chemin de l'artefact.
+    Entraîne le PVProductionModel pour un site sur les données synthétiques.
+    Retourne le chemin de l'artefact.
 
     On entraîne directement sur les données synthétiques (sans passer par
     run_training() qui appelle fetch_historical()) pour garantir la cohérence
@@ -408,32 +493,33 @@ def entrainer_modele_pv_si_absent(session, df_synthetique: pd.DataFrame) -> str:
     """
     from datetime import UTC
 
-    from forecaster.config import settings
     from forecaster.db.models import ModelVersion
     from forecaster.pipeline.training import (
         InsufficientDataError,
         _archive_current_version,
+        _build_artifact_path,
         _register_new_version,
     )
     from forecaster.predictors.pv_production import PVProductionModel
 
     version_active = (
         session.query(ModelVersion)
-        .filter_by(type_modele="pv_production", actif=True)
+        .filter_by(type_modele="pv_production", actif=True, site_id=site_id)
         .first()
     )
     if version_active:
         logger.info(
-            "Modèle PV actif déjà présent (version=%s, MAPE=%.2f%%) — skip entraînement",
+            "Modèle PV site '%s' déjà présent (version=%s, MAPE=%.2f%%) — skip",
+            site_id,
             version_active.version,
             version_active.mape_validation or 0.0,
         )
         return version_active.chemin_artefact
 
-    logger.info("Entraînement PVProductionModel sur données synthétiques…")
+    logger.info("Entraînement PVProductionModel sur données synthétiques pour '%s'…", site_id)
 
     df = df_synthetique.copy().sort_values("timestamp").reset_index(drop=True)
-    df["p_pv_peak_kw"] = SITE_PV_PEAK_KW
+    df["p_pv_peak_kw"] = p_pv_peak_kw
 
     df = df.dropna(
         subset=["production_pv_kw", "irradiance_wm2", "cloud_cover_pct", "temperature_c"]
@@ -441,7 +527,7 @@ def entrainer_modele_pv_si_absent(session, df_synthetique: pd.DataFrame) -> str:
 
     if len(df) < 500:
         raise InsufficientDataError(
-            f"Données PV synthétiques insuffisantes : {len(df)} lignes (min 500)."
+            f"Données PV synthétiques insuffisantes pour '{site_id}' : {len(df)} lignes (min 500)."
         )
 
     split_idx = int(len(df) * 0.8)
@@ -452,18 +538,18 @@ def entrainer_modele_pv_si_absent(session, df_synthetique: pd.DataFrame) -> str:
     model = PVProductionModel(version=version)
     mape = model.train(df_train, df_val)
 
-    artifact_path = settings.models_dir / "pv_production" / f"{version}.joblib"
+    artifact_path = _build_artifact_path("pv_production", version, site_id)
     model.save(artifact_path)
 
-    _archive_current_version(session, "pv_production")
-    _register_new_version(session, "pv_production", version, mape, artifact_path)
+    _archive_current_version(session, "pv_production", site_id)
+    _register_new_version(session, "pv_production", site_id, version, mape, artifact_path)
     session.flush()
 
-    logger.info("Entraînement PV terminé — MAPE validation = %.2f%%", mape)
+    logger.info("Entraînement PV terminé pour '%s' — MAPE validation = %.2f%%", site_id, mape)
 
     version_active = (
         session.query(ModelVersion)
-        .filter_by(type_modele="pv_production", actif=True)
+        .filter_by(type_modele="pv_production", actif=True, site_id=site_id)
         .first()
     )
     return version_active.chemin_artefact
@@ -474,7 +560,9 @@ def entrainer_modele_pv_si_absent(session, df_synthetique: pd.DataFrame) -> str:
 # ---------------------------------------------------------------------------
 
 
-def generer_prevision_48h(session, df_historique: pd.DataFrame, artefact_path: str) -> None:
+def generer_prevision_48h(
+    session, site: dict, df_historique: pd.DataFrame, artefact_path: str
+) -> None:
     """
     Génère une prévision de consommation sur les 48 prochaines heures
     et l'insère dans forecasts_consommation.
@@ -484,14 +572,16 @@ def generer_prevision_48h(session, df_historique: pd.DataFrame, artefact_path: s
     from forecaster.db.models import ConsumptionForecast, ModelVersion
     from forecaster.predictors.consumption import ConsumptionModel
 
+    site_id = site["site_id"]
+
     # Suppression des prévisions existantes pour repartir propre
-    session.query(ConsumptionForecast).filter_by(site_id=SITE_ID).delete()
+    session.query(ConsumptionForecast).filter_by(site_id=site_id).delete()
     session.commit()
 
     # Chargement du modèle
     version_active = (
         session.query(ModelVersion)
-        .filter_by(type_modele="consumption", actif=True)
+        .filter_by(type_modele="consumption", actif=True, site_id=site_id)
         .first()
     )
     model = ConsumptionModel(version=version_active.version)
@@ -555,7 +645,7 @@ def generer_prevision_48h(session, df_historique: pd.DataFrame, artefact_path: s
     now_utc = datetime.now(tz=UTC)
     enregistrements = [
         ConsumptionForecast(
-            site_id=SITE_ID,
+            site_id=site_id,
             timestamp=fp.timestamp,
             puissance_kw=max(fp.puissance_kw, 0.0),
             horizon_h=fp.horizon_h,
@@ -567,7 +657,9 @@ def generer_prevision_48h(session, df_historique: pd.DataFrame, artefact_path: s
     session.bulk_save_objects(enregistrements)
     session.commit()
     logger.info(
-        "%d prévisions insérées dans forecasts_consommation", len(enregistrements)
+        "%d prévisions insérées dans forecasts_consommation pour '%s'",
+        len(enregistrements),
+        site_id,
     )
 
 
@@ -576,7 +668,7 @@ def generer_prevision_48h(session, df_historique: pd.DataFrame, artefact_path: s
 # ---------------------------------------------------------------------------
 
 
-def generer_prevision_pv_48h(session, artefact_path: str) -> None:
+def generer_prevision_pv_48h(session, site: dict, artefact_path: str) -> None:
     """
     Génère une prévision de production PV sur les 48 prochaines heures
     en utilisant les prévisions météo réelles d'Open-Meteo.
@@ -587,26 +679,31 @@ def generer_prevision_pv_48h(session, artefact_path: str) -> None:
     from forecaster.fetchers.openmeteo import fetch_forecast
     from forecaster.predictors.pv_production import PVProductionModel
 
+    site_id = site["site_id"]
+    latitude = site["latitude"]
+    longitude = site["longitude"]
+    p_pv_peak_kw = site["p_pv_peak_kw"]
+
     # Suppression des prévisions existantes pour repartir propre
-    session.query(PVProductionForecast).filter_by(site_id=SITE_ID).delete()
+    session.query(PVProductionForecast).filter_by(site_id=site_id).delete()
     session.commit()
 
     # Chargement du modèle PV
     version_active = (
         session.query(ModelVersion)
-        .filter_by(type_modele="pv_production", actif=True)
+        .filter_by(type_modele="pv_production", actif=True, site_id=site_id)
         .first()
     )
     model = PVProductionModel(version=version_active.version)
     model.load(Path(artefact_path))
-    logger.info("Modèle PV chargé depuis %s", artefact_path)
+    logger.info("Modèle PV site '%s' chargé depuis %s", site_id, artefact_path)
 
     # Récupération de la météo réelle sur 48h
-    logger.info("Récupération météo Open-Meteo (48h)…")
+    logger.info("Récupération météo Open-Meteo (48h) pour '%s'…", site_id)
     meteo = fetch_forecast(
-        site_id=SITE_ID,
-        latitude=SITE_LAT,
-        longitude=SITE_LON,
+        site_id=site_id,
+        latitude=latitude,
+        longitude=longitude,
         horizon_h=48,
     )
 
@@ -655,7 +752,7 @@ def generer_prevision_pv_48h(session, artefact_path: str) -> None:
         # Fallback : irradiance synthétique si hors plage Open-Meteo
         return {
             "temperature_c": _temperature_synthetique(ts.to_pydatetime()),
-            "irradiance_wm2": _irradiance_clear_sky(SITE_LAT, ts.to_pydatetime()),
+            "irradiance_wm2": _irradiance_clear_sky(latitude, ts.to_pydatetime()),
             "cloud_cover_pct": 30.0,
         }
 
@@ -670,7 +767,7 @@ def generer_prevision_pv_48h(session, artefact_path: str) -> None:
             "irradiance_wm2": meteo_ts["irradiance_wm2"],
             "cloud_cover_pct": meteo_ts["cloud_cover_pct"],
             "temperature_c": meteo_ts["temperature_c"],
-            "p_pv_peak_kw": SITE_PV_PEAK_KW,
+            "p_pv_peak_kw": p_pv_peak_kw,
         })
 
     df_futur = pd.DataFrame(lignes)
@@ -683,7 +780,7 @@ def generer_prevision_pv_48h(session, artefact_path: str) -> None:
     now_utc = datetime.now(tz=UTC)
     enregistrements = [
         PVProductionForecast(
-            site_id=SITE_ID,
+            site_id=site_id,
             timestamp=fp.timestamp,
             puissance_kw=fp.puissance_kw,  # déjà clippé à 0 dans predict()
             horizon_h=fp.horizon_h,
@@ -695,7 +792,9 @@ def generer_prevision_pv_48h(session, artefact_path: str) -> None:
     session.bulk_save_objects(enregistrements)
     session.commit()
     logger.info(
-        "%d prévisions insérées dans forecasts_production_pv", len(enregistrements)
+        "%d prévisions insérées dans forecasts_production_pv pour '%s'",
+        len(enregistrements),
+        site_id,
     )
 
 
@@ -704,38 +803,58 @@ def generer_prevision_pv_48h(session, artefact_path: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _appliquer_migrations() -> None:
+    """Lance alembic upgrade head pour appliquer toutes les migrations en attente."""
+    from alembic import command
+    from alembic.config import Config
+
+    alembic_cfg = Config(Path(__file__).parent.parent / "alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Migrations Alembic appliquées")
+
+
 def main() -> None:
     from forecaster.db.models import Base
     from forecaster.db.session import SessionLocal, engine
 
-    logger.info("=== init_demo — démarrage ===")
+    logger.info("=== init_demo — démarrage (%d sites) ===", len(SITES))
 
-    # Étape 1 : schéma DB
+    # Étape 1 : schéma DB + migrations
     attendre_db(engine)
+    _appliquer_migrations()
     Base.metadata.create_all(engine)
     logger.info("Schéma DB prêt")
 
     with SessionLocal() as session:
-        # Étape 2 : site
-        inserer_site_si_absent(session)
+        # Étapes 2 + 3 : insertion des sites et de leurs historiques
+        df_hist_par_site: dict[str, pd.DataFrame] = {}
+        df_pv_par_site: dict[str, pd.DataFrame] = {}
 
-        # Étape 3 : historique consommation
-        df_historique = charger_historique_si_absent(session)
+        for site in SITES:
+            inserer_site_si_absent(session, site)
+            df_hist_par_site[site["site_id"]] = charger_historique_si_absent(session, site)
+            df_pv_par_site[site["site_id"]] = ajouter_production_pv_synthetique(session, site)
 
-        # Étape 3b : production PV synthétique
-        df_synthétique = ajouter_production_pv_synthetique(session)
+        # Étapes 4 + 5 : entraînement et prévision par site
+        for site in SITES:
+            site_id = site["site_id"]
 
-        # Étape 4 : entraînement ConsumptionModel
-        artefact_path = entrainer_modele_si_absent(session)
+            # Entraînement ConsumptionModel
+            artefact_conso = entrainer_modele_si_absent(session, site_id)
 
-        # Étape 4b : entraînement PVProductionModel
-        artefact_pv_path = entrainer_modele_pv_si_absent(session, df_synthétique)
+            # Entraînement PVProductionModel (données synthétiques propres au site)
+            artefact_pv = entrainer_modele_pv_si_absent(
+                session,
+                site_id,
+                df_pv_par_site[site_id],
+                site["p_pv_peak_kw"],
+            )
 
-        # Étape 5 : prévision consommation 48h
-        generer_prevision_48h(session, df_historique, artefact_path)
+            # Prévision consommation 48h
+            generer_prevision_48h(session, site, df_hist_par_site[site_id], artefact_conso)
 
-        # Étape 5b : prévision production PV 48h
-        generer_prevision_pv_48h(session, artefact_pv_path)
+            # Prévision production PV 48h
+            generer_prevision_pv_48h(session, site, artefact_pv)
 
     logger.info("=== init_demo — terminé ✓ ===")
 

@@ -154,7 +154,7 @@ def _trigger_retraining(
     )
 
     try:
-        new_mape = run_training(session, model_type)
+        new_mape = run_training(session, model_type, site_id)
         logger.info(
             "monitoring | réentraînement terminé | site=%s | model=%s "
             "| ancienne MAPE=%.2f%% | nouvelle MAPE=%.2f%%",

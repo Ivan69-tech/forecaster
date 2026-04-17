@@ -181,7 +181,7 @@ def test_trigger_retraining_appelle_run_training(
     ) as mock_train:
         _trigger_retraining(db_session, site_monitoring.site_id, "consumption", 20.0)
 
-    mock_train.assert_called_once_with(db_session, "consumption")
+    mock_train.assert_called_once_with(db_session, "consumption", site_monitoring.site_id)
 
 
 def test_trigger_retraining_ne_plante_pas_si_training_echoue(

@@ -122,7 +122,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT DISTINCT ON (timestamp)\n    timestamp AS \"time\",\n    prix_eur_mwh AS \"Prix (€/MWh)\"\nFROM forecasts_prix_spot\nWHERE site_id = 'site-demo-01'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp, date_generation DESC",
+          "rawSql": "SELECT DISTINCT ON (timestamp)\n    timestamp AS \"time\",\n    prix_eur_mwh AS \"Prix (€/MWh)\"\nFROM forecasts_prix_spot\nWHERE $__timeFilter(timestamp)\nORDER BY timestamp, date_generation DESC",
           "refId": "A",
           "sql": {
             "columns": [
@@ -210,7 +210,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT DISTINCT ON (timestamp)\n    prix_eur_mwh AS \"€/MWh\"\nFROM forecasts_prix_spot\nWHERE site_id = 'site-demo-01'\n  AND timestamp <= NOW()\n  AND timestamp > NOW() - INTERVAL '1 hour'\nORDER BY timestamp DESC, date_generation DESC\nLIMIT 1",
+          "rawSql": "SELECT DISTINCT ON (timestamp)\n    prix_eur_mwh AS \"€/MWh\"\nFROM forecasts_prix_spot\nWHERE timestamp <= NOW()\n  AND timestamp > NOW() - INTERVAL '1 hour'\nORDER BY timestamp DESC, date_generation DESC\nLIMIT 1",
           "refId": "A"
         }
       ],
@@ -270,7 +270,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT MIN(prix_eur_mwh) AS \"€/MWh\"\nFROM (\n    SELECT DISTINCT ON (timestamp) prix_eur_mwh\n    FROM forecasts_prix_spot\n    WHERE site_id = 'site-demo-01'\n      AND timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t",
+          "rawSql": "SELECT MIN(prix_eur_mwh) AS \"€/MWh\"\nFROM (\n    SELECT DISTINCT ON (timestamp) prix_eur_mwh\n    FROM forecasts_prix_spot\n    WHERE timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t",
           "refId": "A"
         }
       ],
@@ -341,7 +341,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT MAX(prix_eur_mwh) AS \"€/MWh\"\nFROM (\n    SELECT DISTINCT ON (timestamp) prix_eur_mwh\n    FROM forecasts_prix_spot\n    WHERE site_id = 'site-demo-01'\n      AND timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t",
+          "rawSql": "SELECT MAX(prix_eur_mwh) AS \"€/MWh\"\nFROM (\n    SELECT DISTINCT ON (timestamp) prix_eur_mwh\n    FROM forecasts_prix_spot\n    WHERE timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t",
           "refId": "A"
         }
       ],
@@ -400,7 +400,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT TO_CHAR(\n    t.timestamp AT TIME ZONE 'Europe/Paris',\n    'HH24\"h\"MI'\n) AS \"Creux J+1\"\nFROM (\n    SELECT DISTINCT ON (timestamp) timestamp, prix_eur_mwh\n    FROM forecasts_prix_spot\n    WHERE site_id = 'site-demo-01'\n      AND timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t\nORDER BY t.prix_eur_mwh ASC\nLIMIT 1",
+          "rawSql": "SELECT TO_CHAR(\n    t.timestamp AT TIME ZONE 'Europe/Paris',\n    'HH24\"h\"MI'\n) AS \"Creux J+1\"\nFROM (\n    SELECT DISTINCT ON (timestamp) timestamp, prix_eur_mwh\n    FROM forecasts_prix_spot\n    WHERE timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t\nORDER BY t.prix_eur_mwh ASC\nLIMIT 1",
           "refId": "A"
         }
       ],
@@ -512,7 +512,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT\n    timestamp AT TIME ZONE 'Europe/Paris' AS \"Heure (Paris)\",\n    ROUND(prix_eur_mwh::numeric, 2) AS \"Prix (€/MWh)\",\n    TO_CHAR(date_generation AT TIME ZONE 'Europe/Paris', 'DD/MM HH24:MI') AS \"Récupéré le\"\nFROM (\n    SELECT DISTINCT ON (timestamp) timestamp, prix_eur_mwh, date_generation\n    FROM forecasts_prix_spot\n    WHERE site_id = 'site-demo-01'\n      AND timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t\nORDER BY timestamp ASC",
+          "rawSql": "SELECT\n    timestamp AT TIME ZONE 'Europe/Paris' AS \"Heure (Paris)\",\n    ROUND(prix_eur_mwh::numeric, 2) AS \"Prix (€/MWh)\",\n    TO_CHAR(date_generation AT TIME ZONE 'Europe/Paris', 'DD/MM HH24:MI') AS \"Récupéré le\"\nFROM (\n    SELECT DISTINCT ON (timestamp) timestamp, prix_eur_mwh, date_generation\n    FROM forecasts_prix_spot\n    WHERE timestamp >= NOW()\n      AND timestamp < NOW() + INTERVAL '24 hours'\n    ORDER BY timestamp, date_generation DESC\n) t\nORDER BY timestamp ASC",
           "refId": "A"
         }
       ],

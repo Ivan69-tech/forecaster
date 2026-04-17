@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Production PV — prévisions LightGBM vs mesures réelles — site-demo-01",
+  "description": "Production PV — prévisions LightGBM vs mesures réelles par site",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -115,7 +115,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT DISTINCT ON (timestamp)\n    timestamp AS \"time\",\n    puissance_kw AS \"Prévision PV (kW)\"\nFROM forecasts_production_pv\nWHERE site_id = 'site-demo-01'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp, date_generation DESC",
+          "rawSql": "SELECT DISTINCT ON (timestamp)\n    timestamp AS \"time\",\n    puissance_kw AS \"Prévision PV (kW)\"\nFROM forecasts_production_pv\nWHERE site_id = '$site_id'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp, date_generation DESC",
           "refId": "A",
           "sql": {
             "columns": [
@@ -143,7 +143,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n    timestamp AS \"time\",\n    production_pv_kw AS \"Production réelle (kW)\"\nFROM mesures_reelles\nWHERE site_id = 'site-demo-01'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp ASC",
+          "rawSql": "SELECT\n    timestamp AS \"time\",\n    production_pv_kw AS \"Production réelle (kW)\"\nFROM mesures_reelles\nWHERE site_id = '$site_id'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp ASC",
           "refId": "B",
           "sql": {
             "columns": [
@@ -228,7 +228,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT AVG(puissance_kw) AS \"kW\" FROM forecasts_production_pv WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '1 hour'",
+          "rawSql": "SELECT AVG(puissance_kw) AS \"kW\" FROM forecasts_production_pv WHERE site_id = '$site_id' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '1 hour'",
           "refId": "A"
         }
       ],
@@ -296,7 +296,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT MAX(puissance_kw) AS \"kW\" FROM forecasts_production_pv WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '48 hours'",
+          "rawSql": "SELECT MAX(puissance_kw) AS \"kW\" FROM forecasts_production_pv WHERE site_id = '$site_id' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '48 hours'",
           "refId": "A"
         }
       ],
@@ -360,7 +360,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT COUNT(*) / 4 AS \"Heures\" FROM forecasts_production_pv WHERE site_id = 'site-demo-01' AND timestamp >= NOW()",
+          "rawSql": "SELECT COUNT(*) / 4 AS \"Heures\" FROM forecasts_production_pv WHERE site_id = '$site_id' AND timestamp >= NOW()",
           "refId": "A"
         }
       ],
@@ -520,7 +520,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT timestamp AT TIME ZONE 'Europe/Paris' AS \"Heure (Paris)\", ROUND(puissance_kw::numeric, 1) AS \"Puissance (kW)\", horizon_h AS \"Horizon (h)\", TO_CHAR(date_generation AT TIME ZONE 'Europe/Paris', 'HH24:MI') AS \"Généré à\" FROM forecasts_production_pv WHERE site_id = 'site-demo-01' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '6 hours' ORDER BY timestamp ASC",
+          "rawSql": "SELECT timestamp AT TIME ZONE 'Europe/Paris' AS \"Heure (Paris)\", ROUND(puissance_kw::numeric, 1) AS \"Puissance (kW)\", horizon_h AS \"Horizon (h)\", TO_CHAR(date_generation AT TIME ZONE 'Europe/Paris', 'HH24:MI') AS \"Généré à\" FROM forecasts_production_pv WHERE site_id = '$site_id' AND timestamp >= NOW() AND timestamp < NOW() + INTERVAL '6 hours' ORDER BY timestamp ASC",
           "refId": "A"
         }
       ],
@@ -535,7 +535,27 @@
     "pv"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "forecaster-pg"
+        },
+        "definition": "SELECT site_id FROM sites ORDER BY site_id",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Site",
+        "multi": false,
+        "name": "site_id",
+        "options": [],
+        "query": "SELECT site_id FROM sites ORDER BY site_id",
+        "refresh": 2,
+        "regex": "",
+        "sort": 0,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-24h",

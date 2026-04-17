@@ -104,20 +104,22 @@ def get_mesures_reelles_production_pv(
 def get_active_model_version(
     session: Session,
     model_type: str,
+    site_id: str,
 ) -> ModelVersion | None:
     """
-    Lecture de modeles_versions — version active pour un type de modèle.
+    Lecture de modeles_versions — version active pour un type de modèle et un site.
 
     Args:
         session:    Session SQLAlchemy active.
         model_type: "consumption" | "pv_production"
+        site_id:    Identifiant du site.
 
     Returns:
-        L'objet ModelVersion actif, ou None si aucun modèle actif.
+        L'objet ModelVersion actif pour ce site, ou None si aucun modèle actif.
     """
     return (
         session.query(ModelVersion)
-        .filter_by(type_modele=model_type, actif=True)
+        .filter_by(type_modele=model_type, actif=True, site_id=site_id)
         .first()
     )
 

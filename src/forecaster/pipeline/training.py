@@ -36,13 +36,14 @@ class TrainingReport:
 TRAINING_WINDOW_DAYS = 90  # §3.4 — 90 derniers jours
 
 
-def run_training(session: Session, model_type: str) -> float:
+def run_training(session: Session, model_type: str, site_id: str) -> float:
     """
-    Réentraîne le modèle `model_type` sur les 90 derniers jours de mesures réelles.
+    Réentraîne le modèle `model_type` sur les 90 derniers jours de mesures réelles du site.
 
     Args:
         session:    Session SQLAlchemy active.
         model_type: "consumption" | "pv_production"
+        site_id:    Identifiant du site pour lequel entraîner le modèle.
 
     Returns:
         MAPE de validation du nouveau modèle (%).
@@ -50,51 +51,50 @@ def run_training(session: Session, model_type: str) -> float:
     Raises:
         ValueError: Si model_type est invalide.
         InsufficientDataError: Si les données d'entraînement sont insuffisantes.
-
-    TODO:
-        1. Valider model_type
-        2. Lire les 90 derniers jours de mesures_reelles + forecasts météo
-        3. Construire df_train (80%) et df_val (20% les plus récents)
-        4. Instancier le bon modèle (ConsumptionModel ou PVProductionModel)
-        5. Appeler model.train(df_train, df_val) → mape_validation
-        6. Générer un chemin d'artefact versionné dans settings.models_dir
-        7. Appeler model.save(path)
-        8. Archiver l'ancienne version active (actif = False)
-        9. Insérer la nouvelle version dans modeles_versions (actif = True)
-        10. Logger le résultat
     """
     if model_type not in MODEL_TYPES:
         raise ValueError(f"model_type invalide : '{model_type}'. Attendu : {MODEL_TYPES}")
 
-    logger.info("run_training | model=%s | démarrage", model_type)
+    logger.info("run_training | site=%s | model=%s | démarrage", site_id, model_type)
 
     cutoff = datetime.now(tz=UTC) - timedelta(days=TRAINING_WINDOW_DAYS)
 
-    df_train, df_val = _load_training_data(session, model_type, cutoff)
+    df_train, df_val = _load_training_data(session, model_type, cutoff, site_id)
     model = _instantiate_model(model_type)
     mape = model.train(df_train, df_val)
 
-    artifact_path = _build_artifact_path(model_type, model.version)
+    artifact_path = _build_artifact_path(model_type, model.version, site_id)
     model.save(artifact_path)
 
-    _archive_current_version(session, model_type)
-    _register_new_version(session, model_type, model.version, mape, artifact_path)
+    _archive_current_version(session, model_type, site_id)
+    _register_new_version(session, model_type, site_id, model.version, mape, artifact_path)
 
     logger.info(
-        "run_training | model=%s | MAPE=%.2f%% | artefact=%s", model_type, mape, artifact_path
+        "run_training | site=%s | model=%s | MAPE=%.2f%% | artefact=%s",
+        site_id,
+        model_type,
+        mape,
+        artifact_path,
     )
     return mape
 
 
 def run_training_all(session: Session) -> TrainingReport:
-    """Réentraîne tous les modèles. Retourne un TrainingReport avec succès et échecs."""
+    """Réentraîne tous les modèles pour tous les sites. Retourne un TrainingReport."""
+    from forecaster.db.models import Site
+
+    sites = session.query(Site).all()
     report = TrainingReport()
-    for model_type in MODEL_TYPES:
-        try:
-            report.results[model_type] = run_training(session, model_type)
-        except Exception:
-            logger.exception("run_training | model=%s | échec", model_type)
-            report.failures.append(model_type)
+    for site in sites:
+        for model_type in MODEL_TYPES:
+            key = f"{site.site_id}/{model_type}"
+            try:
+                report.results[key] = run_training(session, model_type, site.site_id)
+            except Exception:
+                logger.exception(
+                    "run_training | site=%s | model=%s | échec", site.site_id, model_type
+                )
+                report.failures.append(key)
     return report
 
 
@@ -104,13 +104,13 @@ def run_training_all(session: Session) -> TrainingReport:
 
 
 def _load_training_data(
-    session: Session, model_type: str, cutoff: datetime
+    session: Session, model_type: str, cutoff: datetime, site_id: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Charge les données d'entraînement depuis mesures_reelles.
+    Charge les données d'entraînement depuis mesures_reelles pour un site donné.
 
     Pour le modèle de consommation :
-      1. Lit conso_kw depuis mesures_reelles depuis `cutoff`
+      1. Lit conso_kw depuis mesures_reelles depuis `cutoff` pour `site_id`
       2. Calcule les lags J-1 et J-7 sur conso_kw
       3. Ajoute temperature_c = 0 (TODO : remplacer par Open-Meteo archive)
       4. Calcule les lags de température J-1 et J-7
@@ -121,19 +121,15 @@ def _load_training_data(
 
     Raises:
         InsufficientDataError: Si les données sont insuffisantes après nettoyage.
-        NotImplementedError: Si model_type == "pv_production" (non implémenté).
     """
     if model_type == "pv_production":
-        return _load_training_data_pv(session, cutoff)
+        return _load_training_data_pv(session, cutoff, site_id)
 
-    # Pour les tests, le site_id est passé via la session — on charge tous les sites disponibles.
-    # En production, run_training() sera appelé par site. Pour l'instant on agrège.
-    # TODO: ajouter site_id en paramètre quand run_training() sera multi-site.
     from forecaster.db.models import RealMeasure
 
     rows = (
         session.query(RealMeasure.timestamp, RealMeasure.conso_kw)
-        .filter(RealMeasure.timestamp >= cutoff)
+        .filter(RealMeasure.site_id == site_id, RealMeasure.timestamp >= cutoff)
         .order_by(RealMeasure.timestamp)
         .all()
     )
@@ -195,25 +191,27 @@ def _instantiate_model(model_type: str):
     return PVProductionModel(version=version)
 
 
-def _build_artifact_path(model_type: str, version: str) -> Path:
-    return settings.models_dir / model_type / f"{version}.joblib"
+def _build_artifact_path(model_type: str, version: str, site_id: str) -> Path:
+    return settings.models_dir / site_id / model_type / f"{version}.joblib"
 
 
-def _archive_current_version(session: Session, model_type: str) -> None:
-    """Passe actif=False sur toutes les versions actives du model_type."""
-    session.query(ModelVersion).filter_by(type_modele=model_type, actif=True).update(
-        {"actif": False}
-    )
+def _archive_current_version(session: Session, model_type: str, site_id: str) -> None:
+    """Passe actif=False sur les versions actives du model_type pour ce site."""
+    session.query(ModelVersion).filter_by(
+        type_modele=model_type, actif=True, site_id=site_id
+    ).update({"actif": False})
 
 
 def _register_new_version(
     session: Session,
     model_type: str,
+    site_id: str,
     version: str,
     mape: float,
     artifact_path: Path,
 ) -> None:
     mv = ModelVersion(
+        site_id=site_id,
         type_modele=model_type,
         version=version,
         date_entrainement=datetime.now(tz=UTC),
@@ -225,20 +223,19 @@ def _register_new_version(
 
 
 def _load_training_data_pv(
-    session: Session, cutoff: datetime
+    session: Session, cutoff: datetime, site_id: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Charge les données d'entraînement PV depuis mesures_reelles + Open-Meteo archive.
+    Charge les données d'entraînement PV depuis mesures_reelles + Open-Meteo archive
+    pour un site donné.
 
-    Pour chaque site en DB :
-      1. Lit production_pv_kw depuis mesures_reelles depuis `cutoff`
+    Étapes :
+      1. Lit production_pv_kw depuis mesures_reelles depuis `cutoff` pour `site_id`
       2. Récupère la météo historique (irradiance, cloud_cover, température)
          depuis l'API archive Open-Meteo pour la même période
       3. Rééchantillonne la météo horaire → 15 min (interpolation linéaire)
       4. Jointure sur timestamp
       5. Ajoute p_pv_peak_kw (constante par site)
-
-    Tous les sites sont concaténés avant le split train/val.
 
     Raises:
         InsufficientDataError: Si les données sont insuffisantes après nettoyage.
@@ -247,83 +244,70 @@ def _load_training_data_pv(
     from forecaster.db.readers import get_mesures_reelles_production_pv
     from forecaster.fetchers.openmeteo import fetch_historical
 
-    sites = session.query(Site).all()
-    if not sites:
+    site = session.query(Site).filter_by(site_id=site_id).first()
+    if site is None:
         raise InsufficientDataError(
-            "Aucun site trouvé en base — impossible d'entraîner le modèle PV."
+            f"Site '{site_id}' introuvable en base — impossible d'entraîner le modèle PV."
         )
 
-    fragments = []
-    for site in sites:
-        df_pv = get_mesures_reelles_production_pv(session, site.site_id, cutoff)
-        if df_pv.empty:
-            logger.warning(
-                "_load_training_data_pv | site=%s | aucune donnée PV — site ignoré",
-                site.site_id,
-            )
-            continue
-
-        start_date = df_pv["timestamp"].min().date()
-        end_date = df_pv["timestamp"].max().date()
-
-        try:
-            meteo = fetch_historical(
-                site_id=site.site_id,
-                latitude=site.latitude,
-                longitude=site.longitude,
-                start_date=start_date,
-                end_date=end_date,
-            )
-        except Exception:
-            logger.exception(
-                "_load_training_data_pv | site=%s | échec fetch_historical — site ignoré",
-                site.site_id,
-            )
-            continue
-
-        # Construire un DataFrame hourly de météo, puis rééchantillonner en 15 min
-        df_meteo = pd.DataFrame(
-            [
-                {
-                    "timestamp": p.timestamp,
-                    "temperature_c": p.temperature_c,
-                    "irradiance_wm2": p.irradiance_wm2,
-                    "cloud_cover_pct": p.cloud_cover_pct,
-                }
-                for p in meteo.points
-            ]
-        )
-        df_meteo["timestamp"] = pd.to_datetime(df_meteo["timestamp"], utc=True)
-        df_meteo = df_meteo.set_index("timestamp").sort_index()
-
-        # Rééchantillonnage horaire → 15 min
-        # Irradiance : interpolation linéaire (variation douce)
-        # Cloud cover : forward-fill (valeur discrète par heure)
-        df_meteo_15min = df_meteo.resample("15min").interpolate(method="linear")
-        df_meteo_15min["cloud_cover_pct"] = (
-            df_meteo[["cloud_cover_pct"]].resample("15min").ffill()["cloud_cover_pct"]
-        )
-        df_meteo_15min = df_meteo_15min.reset_index()
-        df_meteo_15min = df_meteo_15min.rename(columns={"index": "timestamp"})
-
-        # Arrondir les timestamps PV au pas de 15 min pour s'aligner sur la grille météo.
-        # Les mesures terrain (5 min) ou les historiques décalés (init_demo) ne tombent
-        # pas forcément sur :00/:15/:30/:45 UTC — sans arrondi la jointure donne 0 ligne.
-        df_pv["timestamp"] = pd.to_datetime(df_pv["timestamp"], utc=True).dt.round("15min")
-        df_pv = df_pv.groupby("timestamp", as_index=False)["production_pv_kw"].mean()
-
-        # Jointure sur timestamp (inner join — on ne garde que les instants communs)
-        df_merged = pd.merge(df_pv, df_meteo_15min, on="timestamp", how="inner")
-        df_merged["p_pv_peak_kw"] = float(site.p_pv_peak_kw)
-
-        fragments.append(df_merged)
-
-    if not fragments:
+    df_pv = get_mesures_reelles_production_pv(session, site.site_id, cutoff)
+    if df_pv.empty:
         raise InsufficientDataError(
-            "Aucun site avec suffisamment de données PV + météo pour l'entraînement."
+            f"Aucune donnée PV pour le site '{site_id}' depuis le cutoff."
         )
 
-    df = pd.concat(fragments, ignore_index=True).sort_values("timestamp").reset_index(drop=True)
+    start_date = df_pv["timestamp"].min().date()
+    end_date = df_pv["timestamp"].max().date()
+
+    try:
+        meteo = fetch_historical(
+            site_id=site.site_id,
+            latitude=site.latitude,
+            longitude=site.longitude,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception:
+        raise InsufficientDataError(
+            f"Échec fetch_historical pour le site '{site_id}' — impossible d'entraîner."
+        )
+
+    # Construire un DataFrame hourly de météo, puis rééchantillonner en 15 min
+    df_meteo = pd.DataFrame(
+        [
+            {
+                "timestamp": p.timestamp,
+                "temperature_c": p.temperature_c,
+                "irradiance_wm2": p.irradiance_wm2,
+                "cloud_cover_pct": p.cloud_cover_pct,
+            }
+            for p in meteo.points
+        ]
+    )
+    df_meteo["timestamp"] = pd.to_datetime(df_meteo["timestamp"], utc=True)
+    df_meteo = df_meteo.set_index("timestamp").sort_index()
+
+    # Rééchantillonnage horaire → 15 min
+    # Irradiance : interpolation linéaire (variation douce)
+    # Cloud cover : forward-fill (valeur discrète par heure)
+    df_meteo_15min = df_meteo.resample("15min").interpolate(method="linear")
+    df_meteo_15min["cloud_cover_pct"] = (
+        df_meteo[["cloud_cover_pct"]].resample("15min").ffill()["cloud_cover_pct"]
+    )
+    df_meteo_15min = df_meteo_15min.reset_index()
+    df_meteo_15min = df_meteo_15min.rename(columns={"index": "timestamp"})
+
+    # Arrondir les timestamps PV au pas de 15 min pour s'aligner sur la grille météo.
+    # Les mesures terrain (5 min) ou les historiques décalés (init_demo) ne tombent
+    # pas forcément sur :00/:15/:30/:45 UTC — sans arrondi la jointure donne 0 ligne.
+    df_pv["timestamp"] = pd.to_datetime(df_pv["timestamp"], utc=True).dt.round("15min")
+    df_pv = df_pv.groupby("timestamp", as_index=False)["production_pv_kw"].mean()
+
+    # Jointure sur timestamp (inner join — on ne garde que les instants communs)
+    df = pd.merge(df_pv, df_meteo_15min, on="timestamp", how="inner")
+    df["p_pv_peak_kw"] = float(site.p_pv_peak_kw)
+
+    df = df.sort_values("timestamp").reset_index(drop=True)
     df = df.dropna(
         subset=["production_pv_kw", "irradiance_wm2", "cloud_cover_pct", "temperature_c"]
     ).reset_index(drop=True)

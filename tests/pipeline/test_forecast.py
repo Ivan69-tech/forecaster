@@ -90,7 +90,7 @@ def _inserer_mesures_recentes(session: Session, site: Site, n_lignes: int) -> No
 
 
 def _creer_modele_actif(
-    session: Session, model_type: str, tmp_path: Path
+    session: Session, model_type: str, tmp_path: Path, site_id: str = "site-forecast-test"
 ) -> ModelVersion:
     """Entraîne un modèle minimal et enregistre la version active en DB."""
     if model_type == "consumption":
@@ -133,6 +133,7 @@ def _creer_modele_actif(
     model.save(artifact_path)
 
     mv = ModelVersion(
+        site_id=site_id,
         type_modele=model_type,
         version="test_v1",
         date_entrainement=datetime.now(tz=UTC),
@@ -234,7 +235,7 @@ def test_predict_consumption_retourne_forecast_points(
 ) -> None:
     """_predict_consumption retourne une liste de ForecastPoint."""
     _inserer_mesures_recentes(db_session, site_forecast, N_LIGNES)
-    _creer_modele_actif(db_session, "consumption", tmp_path)
+    _creer_modele_actif(db_session, "consumption", tmp_path, site_forecast.site_id)
 
     weather = _generer_weather_mock(horizon_h=24)
     points = _predict_consumption(db_session, site_forecast, weather, 24)
@@ -262,7 +263,7 @@ def test_predict_pv_retourne_forecast_points(
     db_session: Session, site_forecast: Site, tmp_path: Path
 ) -> None:
     """_predict_pv retourne une liste de ForecastPoint."""
-    _creer_modele_actif(db_session, "pv_production", tmp_path)
+    _creer_modele_actif(db_session, "pv_production", tmp_path, site_forecast.site_id)
 
     weather = _generer_weather_mock(horizon_h=24)
     points = _predict_pv(db_session, site_forecast, weather, 24)
@@ -290,8 +291,8 @@ def test_run_forecast_ecrit_en_base(
 ) -> None:
     """run_forecast() insère des prévisions conso et PV en base."""
     _inserer_mesures_recentes(db_session, site_forecast, N_LIGNES)
-    _creer_modele_actif(db_session, "consumption", tmp_path)
-    _creer_modele_actif(db_session, "pv_production", tmp_path)
+    _creer_modele_actif(db_session, "consumption", tmp_path, site_forecast.site_id)
+    _creer_modele_actif(db_session, "pv_production", tmp_path, site_forecast.site_id)
 
     weather = _generer_weather_mock(horizon_h=24)
     with patch(

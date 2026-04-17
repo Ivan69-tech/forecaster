@@ -133,6 +133,7 @@ class ModelVersion(Base):
     __tablename__ = "modeles_versions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     type_modele: Mapped[str] = mapped_column(
         String(32), nullable=False
     )  # "consumption" | "pv_production"

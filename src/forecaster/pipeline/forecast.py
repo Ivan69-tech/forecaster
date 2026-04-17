@@ -110,7 +110,7 @@ def _predict_consumption(
       - Lags température J-1/J-7 : 0.0 (TODO : Open-Meteo archive)
       - Indicateurs calendaires (jours fériés)
     """
-    model_version = get_active_model_version(session, "consumption")
+    model_version = get_active_model_version(session, "consumption", site.site_id)
     if model_version is None:
         raise ForecastUnavailableError(
             f"Aucun modèle consumption actif pour le site '{site.site_id}'."
@@ -173,7 +173,7 @@ def _predict_pv(
       - Irradiance, nébulosité, température depuis la prévision météo
       - Puissance crête PV du site
     """
-    model_version = get_active_model_version(session, "pv_production")
+    model_version = get_active_model_version(session, "pv_production", site.site_id)
     if model_version is None:
         raise ForecastUnavailableError(
             f"Aucun modèle pv_production actif pour le site '{site.site_id}'."
@@ -190,9 +190,9 @@ def _predict_pv(
         )
         from forecaster.pipeline.training import run_training
 
-        run_training(session, "pv_production")
+        run_training(session, "pv_production", site.site_id)
         session.flush()
-        model_version = get_active_model_version(session, "pv_production")
+        model_version = get_active_model_version(session, "pv_production", site.site_id)
         if model_version is None:
             raise ForecastUnavailableError(
                 f"Aucun modèle pv_production actif après réentraînement pour '{site.site_id}'."
@@ -237,7 +237,7 @@ def _write_conso_forecasts(
     session: Session, site_id: str, points: list[ForecastPoint], horizon_h: int
 ) -> None:
     """Délègue l'écriture des prévisions conso à db/writers.py."""
-    model_version = get_active_model_version(session, "consumption")
+    model_version = get_active_model_version(session, "consumption", site_id)
     version_modele = model_version.version if model_version else "unknown"
     write_consumption_forecasts(session, site_id, points, horizon_h, version_modele)
 
@@ -246,7 +246,7 @@ def _write_pv_forecasts(
     session: Session, site_id: str, points: list[ForecastPoint], horizon_h: int
 ) -> None:
     """Délègue l'écriture des prévisions PV à db/writers.py."""
-    model_version = get_active_model_version(session, "pv_production")
+    model_version = get_active_model_version(session, "pv_production", site_id)
     version_modele = model_version.version if model_version else "unknown"
     write_pv_forecasts(session, site_id, points, horizon_h, version_modele)
 
