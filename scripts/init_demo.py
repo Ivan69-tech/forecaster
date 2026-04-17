@@ -804,11 +804,31 @@ def generer_prevision_pv_48h(session, site: dict, artefact_path: str) -> None:
 
 
 def _appliquer_migrations() -> None:
-    """Lance alembic upgrade head pour appliquer toutes les migrations en attente."""
+    """
+    Applique toutes les migrations Alembic en attente.
+
+    Cas particulier : si les tables existent déjà mais qu'Alembic n'a jamais
+    tracké cette DB (déploiement existant avant l'introduction d'Alembic),
+    on stamp à 0001 pour éviter de rejouer la création des tables.
+    """
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy import inspect
+
+    from forecaster.db.session import engine
 
     alembic_cfg = Config(Path(__file__).parent.parent / "alembic.ini")
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    alembic_suivi = "alembic_version" in tables
+    tables_existantes = "sites" in tables
+
+    if not alembic_suivi and tables_existantes:
+        # DB existante sans suivi Alembic : on stamp 0001 pour ne pas recréer les tables
+        logger.info("DB existante détectée sans suivi Alembic — stamp 0001")
+        command.stamp(alembic_cfg, "0001")
+
     command.upgrade(alembic_cfg, "head")
     logger.info("Migrations Alembic appliquées")
 
