@@ -26,6 +26,9 @@ class Site(Base):
     p_max_bess_kw: Mapped[float] = mapped_column(Float, nullable=False)
     p_pv_peak_kw: Mapped[float] = mapped_column(Float, nullable=False)
     p_souscrite_kw: Mapped[float] = mapped_column(Float, nullable=False)
+    p_max_injection_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p_max_soutirage_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rendement_bess: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.92)
     soc_min_pct: Mapped[float] = mapped_column(Float, nullable=False, default=10.0)
     soc_max_pct: Mapped[float] = mapped_column(Float, nullable=False, default=90.0)
     # Coordonnées géographiques pour l'API météo
