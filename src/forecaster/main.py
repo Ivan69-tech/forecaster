@@ -1,5 +1,5 @@
 """
-Point d'entrée du Service de Prévision (L1 — SGE Tewa Solar).
+Point d'entrée du Service de Prévision.
 
 Séquence de démarrage :
   1. Chargement de la configuration (.env)
@@ -37,7 +37,9 @@ def _check_db_connection() -> None:
 
 def main() -> None:
     logger.info("startup | Service de Prévision SGE — démarrage")
-    logger.info("startup | DATABASE_URL=%s", settings.database_url.split("@")[-1])  # masque credentials
+    logger.info(
+        "startup | DATABASE_URL=%s", settings.database_url.split("@")[-1]
+    )  # masque credentials
     logger.info("startup | MODELS_DIR=%s", settings.models_dir)
     logger.info("startup | MAPE_THRESHOLD=%.1f%%", settings.mape_threshold)
 
@@ -46,7 +48,9 @@ def main() -> None:
     scheduler = build_scheduler()
     logger.info("startup | scheduler configuré — %d jobs", len(scheduler.get_jobs()))
     for job in scheduler.get_jobs():
-        logger.info("startup |   · %s (next run: %s)", job.name, getattr(job, "next_run_time", "N/A"))
+        logger.info(
+            "startup |   · %s (next run: %s)", job.name, getattr(job, "next_run_time", "N/A")
+        )
 
     logger.info("startup | démarrage du scheduler (mode bloquant)")
     try:

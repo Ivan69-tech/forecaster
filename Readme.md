@@ -1,6 +1,6 @@
 # Forecaster — Service de Prévision SGE (L1)
 
-Service de prévision du **Système de Gestion de l'Énergie (SGE)** de Tewa Solar.
+Service de prévision du **Système de Gestion de l'Énergie**.
 Il alimente une base PostgreSQL avec des prévisions de consommation électrique et de
 production PV, consommées par le Service d'Optimisation (L2).
 
@@ -17,12 +17,14 @@ production PV, consommées par le Service d'Optimisation (L2).
 | **Prix spot RTE** | Fetcher RTE (OAuth2) | 1 h | J+1 |
 
 Le modèle de **consommation** utilise les features suivantes :
+
 - **Temporelles** : heure, jour de semaine, mois (encodage sin/cos cyclique), week-end
 - **Lags** : consommation à J-1 et J-7 à la même heure
 - **Météo** : température prévue et ses lags J-1, J-7
 - **Calendaire** : jours fériés français
 
 Le modèle de **production PV** utilise les features suivantes :
+
 - **Météo** : irradiance GHI (W/m²), nébulosité (%), température (°C) — issues d'Open-Meteo
 - **Site** : puissance crête installée (kW)
 - **Temporelles** : heure et mois (encodage sin/cos — proxy de la position solaire)
@@ -97,15 +99,16 @@ docker compose logs -f forecast-init
    génère la production PV synthétique, entraîne le `ConsumptionModel` et le `PVProductionModel`,
    génère les premières prévisions 48h (consommation + PV via Open-Meteo), puis s'arrête
 3. `forecast-service` — démarre le scheduler APScheduler (jobs récurrents)
-4. `grafana` — disponible immédiatement sur **http://localhost:3000**
+4. `grafana` — disponible immédiatement sur **<http://localhost:3000>**
 
 ### Visualiser les prévisions (Grafana)
 
-Ouvre **http://localhost:3000** — aucun login requis (mode anonyme Admin).
+Ouvre **<http://localhost:3000>** — aucun login requis (mode anonyme Admin).
 
 Deux dashboards sont automatiquement provisionnés :
 
 **"Prévisions de Consommation"**
+
 - **Courbe 48h** — prévision LightGBM sur `maintenant → +48h`
 - **Stat — Prochaine heure** — puissance moyenne prévue (kW)
 - **Stat — Pic 48h** — puissance maximale prévue (kW)
@@ -113,6 +116,7 @@ Deux dashboards sont automatiquement provisionnés :
 - **Tableau** — détail au pas 15 min pour les 6 prochaines heures
 
 **"Prix Spots France"**
+
 - **Courbe 48h** — prix EPEX Spot France en escalier (€/MWh), gradient vert→rouge selon le niveau
 - **Stat — Prix heure en cours** — prix du pas horaire actif, coloré par seuil
 - **Stat — Prix min 24h** — meilleur prix d'achat sur les prochaines 24h (charge BESS)

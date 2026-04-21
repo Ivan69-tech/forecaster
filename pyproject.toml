@@ -1,7 +1,7 @@
 [project]
 name = "forecaster"
 version = "0.1.0"
-description = "L1 — Service de Prévision SGE (Tewa Solar)"
+description = "L1 — Service de Prévision"
 requires-python = ">=3.11"
 dependencies = [
     # ML

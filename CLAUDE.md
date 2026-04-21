@@ -37,7 +37,7 @@ docker compose logs -f forecast-service
 
 ## Architecture
 
-Ce repo implémente le **Logiciel 1 — Service de Prévision** du SGE (Système de Gestion de l'Énergie) de Tewa Solar. Il alimente une base PostgreSQL avec des prévisions de prix spots, de consommation et de production PV, consommées par le Service d'Optimisation (L2, repo séparé).
+Ce repo implémente le **Logiciel 1 — Service de Prévision**. Il alimente une base PostgreSQL avec des prévisions de prix spots, de consommation et de production PV, consommées par le Service d'Optimisation (L2, repo séparé).
 
 ### Flux de données
 
@@ -93,6 +93,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
 ---
 
 ## Philosophie générale
+
 - Écris du code simple et explicite. Un développeur junior doit pouvoir comprendre
   chaque fonction sans contexte supplémentaire.
 - Préfère la clarté à la concision. Pas de one-liners cryptiques.
@@ -100,6 +101,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   fait une fonction, elle fait trop de choses.
 
 ## Structure et organisation
+
 - Respecte la structure de répertoires définie dans le README (sources/, models/,
   pipeline/, db/, monitoring/).
 - Chaque nouveau module doit avoir un docstring de fichier expliquant son rôle
@@ -109,6 +111,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   dans le code.
 
 ## Nommage
+
 - Français pour les noms de variables métier (site_id, puissance_kw, soc_kwh,
   horizon_h). Anglais pour la structure technique (class, method, exception names).
 - Pas d'abréviations ambiguës. `consumption_model` plutôt que `cm`.
@@ -118,6 +121,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   `compute_`.
 
 ## Types et interfaces
+
 - Type hints obligatoires sur toutes les fonctions publiques (paramètres + retour).
 - Utilise des dataclasses ou Pydantic models pour tous les objets échangés entre
   modules. Pas de dicts non typés qui traversent les couches.
@@ -125,6 +129,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   pas None silencieux.
 
 ## Gestion des erreurs
+
 - Pas de `except Exception` silencieux. Chaque exception attrapée doit être
   loggée avec le contexte (site_id, timestamp, valeurs en cause).
 - Les erreurs d'API externe (RTE, OpenMeteo) sont retriées 3 fois avec backoff
@@ -135,6 +140,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   (ForecastUnavailableError, ModelNotFoundError, etc.).
 
 ## Base de données
+
 - Toutes les requêtes SQL sont dans db/readers.py ou db/writers.py.
   Jamais de SQL inline dans pipeline/ ou models/.
 - Utilise des requêtes paramétrées. Jamais de f-string pour construire du SQL.
@@ -143,6 +149,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
 - Les insertions en masse utilisent execute_values (psycopg2) pour la performance.
 
 ## Logging
+
 - Utilise le module logging standard, configuré dans main.py.
 - Niveau INFO pour les événements nominaux (forecast généré, modèle chargé).
 - Niveau WARNING pour les situations dégradées récupérables (retry API, MAPE élevé).
@@ -152,6 +159,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
 - Pas de print(). Jamais.
 
 ## Tests
+
 - Chaque nouvelle fonction publique dans pipeline/, models/ et db/ doit avoir
   au moins un test unitaire dans tests/ avec le même chemin miroir
   (pipeline/forecast.py → tests/pipeline/test_forecast.py).
@@ -165,6 +173,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   passent avant de continuer.
 
 ## Sécurité
+
 - Aucune credential (clé API, mot de passe DB, clé VPN) dans le code ou dans
   un fichier versionné. Tout passe par des variables d'environnement.
 - Le fichier .env est dans .gitignore. Un .env.example avec des valeurs fictives
@@ -172,11 +181,13 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
 - Pas de log de valeurs sensibles (tokens, credentials).
 
 ## Docker
+
 - Le Dockerfile utilise python:3.11-slim comme base.
 - Les secrets sont injectés via des variables d'environnement, jamais copiés
   dans l'image.
 
 ## Documentation
+
 - Mets à jour le README.md à chaque nouvelle feature ou changement de
   comportement. Le README doit toujours refléter l'état réel du code.
 - Le README contient : description du service, variables d'environnement
@@ -188,6 +199,7 @@ Les tests utilisent SQLite en mémoire (fixture `test_engine` dans `conftest.py`
   note-le dans une section ## Points ouverts du README.
 
 ## Workflow
+
 - Avant de commencer une nouvelle feature, résume en une phrase ce que tu vas
   faire et pourquoi.
 - Après chaque feature complète : tests passent, README à jour, pas de code
