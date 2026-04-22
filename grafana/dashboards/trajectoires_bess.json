@@ -48,7 +48,7 @@
               "viz": false
             },
             "insertNulls": false,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
             "pointSize": 5,
             "scaleDistribution": {
@@ -164,34 +164,6 @@
             ],
             "limit": 50
           }
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "forecaster-pg"
-          },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT\n    timestamp AS \"time\",\n    energie_kwh AS \"Énergie échangée (kWh)\"\nFROM trajectoire_pas\nWHERE site_id = '$site_id'\n  AND $__timeFilter(timestamp)\nORDER BY timestamp ASC",
-          "refId": "B",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
         }
       ],
       "title": "Trajectoire BESS — SoE cible et énergie échangée (kWh)",
@@ -225,7 +197,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 12
       },
@@ -262,73 +234,6 @@
         "type": "postgres",
         "uid": "forecaster-pg"
       },
-      "description": "SoE BESS cible au dernier pas connu (timestamp ≤ maintenant), exprimé en % de la capacité nominale",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 20
-              },
-              {
-                "color": "yellow",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 12
-      },
-      "id": 3,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.4.2",
-      "targets": [
-        {
-          "format": "table",
-          "rawSql": "SELECT ROUND(t.soe_cible_kwh * 100.0 / s.capacite_bess_kwh, 1) AS \"SoE %\"\nFROM trajectoire_pas t\nJOIN sites s ON s.site_id = t.site_id\nWHERE t.site_id = '$site_id'\n  AND t.timestamp <= NOW()\nORDER BY t.timestamp DESC\nLIMIT 1",
-          "refId": "A"
-        }
-      ],
-      "title": "SoE actuel (%)",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "forecaster-pg"
-      },
       "description": "Nombre d'heures de trajectoire disponibles au-delà de maintenant",
       "fieldConfig": {
         "defaults": {
@@ -352,8 +257,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 9,
+        "x": 8,
         "y": 12
       },
       "id": 4,
@@ -412,8 +317,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 7,
+        "x": 17,
         "y": 12
       },
       "id": 5,
@@ -588,7 +493,11 @@
   "templating": {
     "list": [
       {
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "site-demo-01",
+          "value": "site-demo-01"
+        },
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "forecaster-pg"
@@ -603,6 +512,7 @@
         "query": "SELECT site_id FROM sites ORDER BY site_id",
         "refresh": 2,
         "regex": "",
+        "skipUrlSync": false,
         "sort": 0,
         "type": "query"
       }
