@@ -555,8 +555,8 @@
     ]
   },
   "time": {
-    "from": "2026-04-09T23:10:55.461Z",
-    "to": "2026-04-15T23:10:55.463Z"
+    "from": "now-6h",
+    "to": "now+48h"
   },
   "timepicker": {
     "refresh_intervals": [
