@@ -460,7 +460,7 @@ def entrainer_modele_si_absent(session, site_id: str) -> str:
         .filter_by(type_modele="consumption", actif=True, site_id=site_id)
         .first()
     )
-    if version_active:
+    if version_active and Path(version_active.chemin_artefact).exists():
         logger.info(
             "Modèle consumption site '%s' déjà présent (version=%s, MAPE=%.2f%%) — skip",
             site_id,
@@ -468,6 +468,12 @@ def entrainer_modele_si_absent(session, site_id: str) -> str:
             version_active.mape_validation or 0.0,
         )
         return version_active.chemin_artefact
+    if version_active:
+        logger.warning(
+            "Artefact consumption site '%s' introuvable (%s) — réentraînement",
+            site_id,
+            version_active.chemin_artefact,
+        )
 
     logger.info("Entraînement ConsumptionModel pour '%s'…", site_id)
     mape = run_training(session, "consumption", site_id)
@@ -516,7 +522,7 @@ def entrainer_modele_pv_si_absent(
         .filter_by(type_modele="pv_production", actif=True, site_id=site_id)
         .first()
     )
-    if version_active:
+    if version_active and Path(version_active.chemin_artefact).exists():
         logger.info(
             "Modèle PV site '%s' déjà présent (version=%s, MAPE=%.2f%%) — skip",
             site_id,
@@ -524,6 +530,12 @@ def entrainer_modele_pv_si_absent(
             version_active.mape_validation or 0.0,
         )
         return version_active.chemin_artefact
+    if version_active:
+        logger.warning(
+            "Artefact PV site '%s' introuvable (%s) — réentraînement",
+            site_id,
+            version_active.chemin_artefact,
+        )
 
     logger.info("Entraînement PVProductionModel sur données synthétiques pour '%s'…", site_id)
 
