@@ -50,28 +50,36 @@ class RTEDataUnavailable(Exception):
     """Levée quand les prix spots RTE ne sont pas disponibles pour la date demandée."""
 
 
-def fetch_spot_prices(target_date: date) -> list[SpotPriceRow]:
+def fetch_spot_prices(
+    start_date: date, end_date: date | None = None
+) -> list[SpotPriceRow]:
     """
-    Récupère les prix spots RTE pour la journée `target_date`.
+    Récupère les prix spots RTE pour la plage [start_date, end_date] incluse.
 
-    Retourne 24 entrées (pas horaire) en heure Paris, converties en UTC.
+    Si end_date est None, seule start_date est récupérée (24 entrées).
+    Avec end_date = start_date + 1 jour, retourne 48 entrées (J et J+1) en un
+    seul appel HTTP.
 
     Args:
-        target_date: La date pour laquelle récupérer les prix (J+1 après publication RTE).
+        start_date: Première date de la plage (incluse).
+        end_date:   Dernière date de la plage (incluse). Par défaut : start_date.
 
     Returns:
         Liste de SpotPriceRow triés par timestamp croissant.
 
     Raises:
         httpx.HTTPStatusError: Si l'API RTE retourne une erreur HTTP après les retries.
-        RTEDataUnavailable: Si les prix ne sont pas encore publiés pour cette date.
+        RTEDataUnavailable: Si les prix ne sont pas encore publiés pour cette plage.
     """
+    if end_date is None:
+        end_date = start_date
+
     paris_tz = ZoneInfo("Europe/Paris")
     start = datetime(
-        target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=paris_tz
+        start_date.year, start_date.month, start_date.day, 0, 0, 0, tzinfo=paris_tz
     )
     end = datetime(
-        target_date.year, target_date.month, target_date.day, 23, 59, 59, tzinfo=paris_tz
+        end_date.year, end_date.month, end_date.day, 23, 59, 59, tzinfo=paris_tz
     )
     params = {
         "start_date": start.isoformat(),
@@ -79,17 +87,20 @@ def fetch_spot_prices(target_date: date) -> list[SpotPriceRow]:
     }
 
     data = _get_with_retry(_WHOLESALE_URL, params)
-    rows = _parse_spot_prices(data, target_date)
+    rows = _parse_spot_prices(data, start_date, end_date)
 
     logger.info(
-        "fetch_spot_prices | date=%s | %d entrées récupérées",
-        target_date,
+        "fetch_spot_prices | start=%s end=%s | %d entrées récupérées",
+        start_date,
+        end_date,
         len(rows),
     )
     return rows
 
 
-def _parse_spot_prices(data: dict, target_date: date) -> list[SpotPriceRow]:
+def _parse_spot_prices(
+    data: dict, start_date: date, end_date: date
+) -> list[SpotPriceRow]:
     """
     Parse la réponse JSON de l'API Wholesale Market RTE.
 
@@ -110,14 +121,14 @@ def _parse_spot_prices(data: dict, target_date: date) -> list[SpotPriceRow]:
     }
 
     Les timestamps sont en heure Paris — on les convertit en UTC pour stockage.
-    On filtre sur la date locale Paris pour exclure les entrées DST de minuit.
+    On filtre sur la date locale Paris pour gérer les transitions DST.
     """
     paris_tz = ZoneInfo("Europe/Paris")
     exchanges = data.get("france_power_exchanges", [])
 
     if not exchanges:
         raise RTEDataUnavailable(
-            f"Réponse RTE vide — aucun échange disponible pour {target_date}"
+            f"Réponse RTE vide — aucun échange disponible pour {start_date} / {end_date}"
         )
 
     rows = []
@@ -125,7 +136,8 @@ def _parse_spot_prices(data: dict, target_date: date) -> list[SpotPriceRow]:
         ts = datetime.fromisoformat(entry["start_date"])
         ts_utc = ts.astimezone(UTC)
         # Comparer en heure Paris pour gérer les transitions DST
-        if ts.astimezone(paris_tz).date() == target_date:
+        date_paris = ts.astimezone(paris_tz).date()
+        if start_date <= date_paris <= end_date:
             rows.append(
                 SpotPriceRow(
                     timestamp=ts_utc,
@@ -137,7 +149,7 @@ def _parse_spot_prices(data: dict, target_date: date) -> list[SpotPriceRow]:
 
     if not rows:
         raise RTEDataUnavailable(
-            f"Aucun prix RTE disponible pour {target_date}"
+            f"Aucun prix RTE disponible pour {start_date} / {end_date}"
         )
 
     return rows

@@ -49,20 +49,29 @@ def _mock_token_response(expires_in: int = 3600) -> MagicMock:
     return mock
 
 
-def _mock_wholesale_response(target_date: date) -> MagicMock:
-    """Mock d'une réponse wholesale RTE avec 24 entrées horaires."""
+def _mock_wholesale_response(start_date: date, end_date: date | None = None) -> MagicMock:
+    """Mock d'une réponse wholesale RTE avec 24 entrées par jour sur la plage donnée."""
+    from datetime import timedelta
     from zoneinfo import ZoneInfo
 
     paris_tz = ZoneInfo("Europe/Paris")
+    if end_date is None:
+        end_date = start_date
+
     values = []
-    for h in range(24):
-        start_dt = datetime(
-            target_date.year, target_date.month, target_date.day, h, 0, 0, tzinfo=paris_tz
-        )
-        values.append({
-            "start_date": start_dt.isoformat(),
-            "price": 80.0 + h * 0.5,
-        })
+    current = start_date
+    price_offset = 0
+    while current <= end_date:
+        for h in range(24):
+            start_dt = datetime(
+                current.year, current.month, current.day, h, 0, 0, tzinfo=paris_tz
+            )
+            values.append({
+                "start_date": start_dt.isoformat(),
+                "price": 80.0 + price_offset * 0.5,
+            })
+            price_offset += 1
+        current += timedelta(days=1)
 
     mock = MagicMock()
     mock.status_code = 200
@@ -111,6 +120,25 @@ def test_fetch_spot_prices_returns_24_entries():
     assert all(r.timestamp.tzinfo == UTC for r in result)
 
 
+def test_fetch_spot_prices_returns_48_entries_for_two_days():
+    """Vérifie que 48 entrées sont retournées quand end_date = start_date + 1 jour."""
+    from datetime import timedelta
+
+    start_date = date(2026, 4, 13)
+    end_date = start_date + timedelta(days=1)
+    token_resp = _mock_token_response()
+    wholesale_resp = _mock_wholesale_response(start_date, end_date)
+
+    with patch("httpx.post", return_value=token_resp), \
+         patch("httpx.get", return_value=wholesale_resp):
+        result = fetch_spot_prices(start_date, end_date)
+
+    assert len(result) == 48
+    assert all(isinstance(r, SpotPriceRow) for r in result)
+    assert result == sorted(result, key=lambda r: r.timestamp)
+    assert all(r.timestamp.tzinfo == UTC for r in result)
+
+
 def test_fetch_spot_prices_raises_when_no_values():
     """Vérifie que RTEDataUnavailable est levée si la réponse ne contient pas de valeurs."""
     target_date = date(2026, 4, 13)
@@ -141,6 +169,33 @@ def test_fetch_spot_prices_raises_when_empty_response():
          patch("httpx.get", return_value=empty_resp):
         with pytest.raises(RTEDataUnavailable):
             fetch_spot_prices(target_date)
+
+
+def test_parse_spot_prices_filters_by_date_range():
+    """Vérifie que seules les entrées dans la fenêtre start_date/end_date sont incluses."""
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    paris_tz = ZoneInfo("Europe/Paris")
+    start_date = date(2026, 4, 13)
+    end_date = date(2026, 4, 14)
+
+    # Construit un jeu de données avec J-1, J et J+1
+    values = []
+    for day_offset in (-1, 0, 1, 2):
+        d = start_date + timedelta(days=day_offset)
+        values.append({
+            "start_date": datetime(d.year, d.month, d.day, 12, 0, tzinfo=paris_tz).isoformat(),
+            "price": 80.0,
+        })
+
+    data = {"france_power_exchanges": [{"values": values}]}
+    rows = _parse_spot_prices(data, start_date, end_date)
+
+    # Seules les entrées du 13 et 14 avril doivent être retournées
+    assert len(rows) == 2
+    dates_paris = [r.timestamp.astimezone(paris_tz).date() for r in rows]
+    assert all(start_date <= d <= end_date for d in dates_paris)
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +240,7 @@ def test_parse_spot_prices_converts_to_utc():
         ]
     }
 
-    rows = _parse_spot_prices(data, target_date)
+    rows = _parse_spot_prices(data, target_date, target_date)
 
     assert len(rows) == 1
     assert rows[0].timestamp == datetime(2026, 4, 12, 22, 0, tzinfo=UTC)

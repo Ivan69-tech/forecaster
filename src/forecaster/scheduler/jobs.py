@@ -110,15 +110,16 @@ def _job_fetch_spot_prices() -> None:
     from forecaster.db.writers import write_spot_prices
     from forecaster.fetchers.rte import RTEDataUnavailable, fetch_spot_prices
 
-    tomorrow = date.today() + timedelta(days=1)
-    logger.info("job | fetch_spot_prices | date=%s | démarrage", tomorrow)
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    logger.info("job | fetch_spot_prices | start=%s end=%s | démarrage", today, tomorrow)
 
     try:
-        rows = fetch_spot_prices(tomorrow)
+        rows = fetch_spot_prices(today, tomorrow)
         logger.info("job | fetch_spot_prices | %d entrées récupérées", len(rows))
     except RTEDataUnavailable:
         logger.warning(
-            "job | fetch_spot_prices | données non disponibles pour %s", tomorrow
+            "job | fetch_spot_prices | données non disponibles pour %s / %s", today, tomorrow
         )
         return
     except Exception:
