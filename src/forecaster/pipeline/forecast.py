@@ -120,10 +120,13 @@ def _predict_consumption(
     model.load(Path(model_version.chemin_artefact))
 
     now = datetime.now(tz=UTC)
+    # Aligner sur le pas de 15 min inférieur pour que les timestamps soient
+    # cohérents avec ceux attendus par l'optimizer (qui fait un _floor_pas).
+    now_floor = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
     freq = pd.Timedelta(minutes=15)
     nombre_pas = horizon_h * 4
     ts_futurs = pd.date_range(
-        start=now + freq,
+        start=now_floor + freq,
         periods=nombre_pas,
         freq=freq,
         tz="UTC",
@@ -142,7 +145,7 @@ def _predict_consumption(
 
     lignes = []
     for ts in ts_futurs:
-        horizon = round((ts - now).total_seconds() / 3600)
+        horizon = round((ts - now_floor).total_seconds() / 3600)
         lag_1d = _lookup_conso_lag(df_hist, ts, timedelta(days=1))
         lag_7d = _lookup_conso_lag(df_hist, ts, timedelta(days=7))
         temperature = _lookup_meteo_value(df_meteo_15min, ts, "temperature_c", 15.0)
@@ -201,10 +204,12 @@ def _predict_pv(
         model.load(Path(model_version.chemin_artefact))
 
     now = datetime.now(tz=UTC)
+    # Aligner sur le pas de 15 min inférieur (cohérence avec l'optimizer).
+    now_floor = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
     freq = pd.Timedelta(minutes=15)
     nombre_pas = horizon_h * 4
     ts_futurs = pd.date_range(
-        start=now + freq,
+        start=now_floor + freq,
         periods=nombre_pas,
         freq=freq,
         tz="UTC",
@@ -215,7 +220,7 @@ def _predict_pv(
 
     lignes = []
     for ts in ts_futurs:
-        horizon = round((ts - now).total_seconds() / 3600)
+        horizon = round((ts - now_floor).total_seconds() / 3600)
         irradiance = _lookup_meteo_value(df_meteo_15min, ts, "irradiance_wm2", 0.0)
         cloud_cover = _lookup_meteo_value(df_meteo_15min, ts, "cloud_cover_pct", 30.0)
         temperature = _lookup_meteo_value(df_meteo_15min, ts, "temperature_c", 15.0)
