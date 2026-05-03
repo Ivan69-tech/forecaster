@@ -849,9 +849,10 @@ def main() -> None:
     logger.info("=== init_demo — démarrage (%d sites) ===", len(SITES))
 
     # Étape 1 : schéma DB + migrations
+    # Alembic est la seule source de vérité pour le DDL.
+    # create_all() est volontairement absent : toute table doit passer par une migration.
     attendre_db(engine)
     _appliquer_migrations()
-    Base.metadata.create_all(engine)
     logger.info("Schéma DB prêt")
 
     with SessionLocal() as session:

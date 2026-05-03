@@ -198,7 +198,6 @@ def upgrade() -> None:
         sa.Column("timestamp", sa.Float(), nullable=False),
         sa.Column("type", sa.Text(), nullable=False),
         sa.Column("value", sa.Text(), nullable=False),
-        sa.ForeignKeyConstraint(["site_id"], ["sites.site_id"]),
         sa.PrimaryKeyConstraint("site_id", "key", "timestamp"),
     )
     op.create_index("ix_ppc_raw_site_id", "ppc_raw", ["site_id"])

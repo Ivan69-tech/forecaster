@@ -47,7 +47,7 @@ class Site(Base):
     conso_forecasts: Mapped[list["ConsumptionForecast"]] = relationship(back_populates="site")
     pv_forecasts: Mapped[list["PVProductionForecast"]] = relationship(back_populates="site")
     real_measures: Mapped[list["RealMeasure"]] = relationship(back_populates="site")
-    ppc_raws: Mapped[list["PpcRaw"]] = relationship(back_populates="site")
+
 
 
 class SpotPriceForecast(Base):
@@ -160,11 +160,9 @@ class PpcRaw(Base):
     __tablename__ = "ppc_raw"
 
     site_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("sites.site_id"), nullable=False, primary_key=True, index=True
+        String(64), nullable=False, primary_key=True, index=True
     )
     key: Mapped[str] = mapped_column(Text, nullable=False, primary_key=True)
     timestamp: Mapped[float] = mapped_column(Float, nullable=False, primary_key=True, index=True)
     type: Mapped[str] = mapped_column(Text, nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
-
-    site: Mapped["Site"] = relationship(back_populates="ppc_raws")
