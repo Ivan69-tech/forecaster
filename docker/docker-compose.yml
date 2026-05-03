@@ -13,9 +13,6 @@ services:
     volumes:
       - ./models_data:/data/models
       - ../scripts:/app/scripts:ro   # mount local pour éviter un rebuild à chaque modif
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: "no"
 
   # ── Service de prévision (scheduler APScheduler) ─────────────────────────────
@@ -27,7 +24,4 @@ services:
       - ../.env
     volumes:
       - ./models_data:/data/models
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
