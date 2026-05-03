@@ -1,20 +1,5 @@
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: forecaster
-      POSTGRES_PASSWORD: forecaster
-      POSTGRES_DB: forecaster
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - ./postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forecaster"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
+  
   # ── Service d'initialisation (s'exécute une seule fois) ─────────────────────
   # Insère un site demo, charge l'historique CSV, entraîne le modèle,
   # génère la première prévision 48h.
@@ -23,10 +8,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     command: python scripts/init_demo.py
-    environment:
-      DATABASE_URL: postgresql://forecaster:forecaster@postgres:5432/forecaster
-      MODELS_DIR: /data/models
-      LOG_LEVEL: INFO
+    env_file:
+      - ../.env
     volumes:
       - ./models_data:/data/models
       - ../scripts:/app/scripts:ro   # mount local pour éviter un rebuild à chaque modif
@@ -48,24 +31,3 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-
-  # ── Grafana — visualisation des prévisions ────────────────────────────────────
-  grafana:
-    image: grafana/grafana:10.4.2
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      # Accès anonyme en mode Admin pour la démo (pas de login requis)
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_AUTH_DISABLE_LOGIN_FORM=true
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ../grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      - postgres
-    restart: unless-stopped
-
-volumes:
-  grafana_data:
