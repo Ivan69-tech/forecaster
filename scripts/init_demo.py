@@ -28,7 +28,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-import holidays
 import numpy as np
 import pandas as pd
 from sqlalchemy import func, text
@@ -43,7 +42,7 @@ SITES = [
     {
         "site_id": "site-demo-01",
         "nom": "Site Industriel Demo",
-        "latitude": 43.6047,    # Toulouse
+        "latitude": 43.6047,  # Toulouse
         "longitude": 1.4442,
         "p_pv_peak_kw": 300.0,
         "capacite_bess_kwh": 500.0,
@@ -57,7 +56,7 @@ SITES = [
     {
         "site_id": "site-demo-02",
         "nom": "Entrepôt Logistique Demo",
-        "latitude": 45.7640,    # Lyon
+        "latitude": 45.7640,  # Lyon
         "longitude": 4.8357,
         "p_pv_peak_kw": 150.0,
         "capacite_bess_kwh": 250.0,
@@ -217,9 +216,7 @@ def charger_historique_si_absent(session, site: dict) -> pd.DataFrame:
     return df
 
 
-def _generer_conso_entrepot(
-    timestamps: pd.DatetimeIndex, rng: np.random.Generator
-) -> list[float]:
+def _generer_conso_entrepot(timestamps: pd.DatetimeIndex, rng: np.random.Generator) -> list[float]:
     """
     Génère une série de consommation synthétique pour un entrepôt logistique.
 
@@ -235,7 +232,7 @@ def _generer_conso_entrepot(
         if jour_semaine < 5 and 8 <= hour_local < 18:
             base = 200.0  # heures ouvrées semaine
         elif jour_semaine >= 5:
-            base = 80.0   # week-end
+            base = 80.0  # week-end
         else:
             base = 120.0  # nuit semaine
 
@@ -270,9 +267,7 @@ def ajouter_production_pv_synthetique(session, site: dict) -> pd.DataFrame:
 
     # Vérifier si la production PV est déjà renseignée (idempotence)
     somme = (
-        session.query(func.sum(RealMeasure.production_pv_kw))
-        .filter_by(site_id=site_id)
-        .scalar()
+        session.query(func.sum(RealMeasure.production_pv_kw)).filter_by(site_id=site_id).scalar()
     )
     if somme and somme > 0:
         logger.info(
@@ -295,15 +290,15 @@ def ajouter_production_pv_synthetique(session, site: dict) -> pd.DataFrame:
         productions = [r.production_pv_kw for r in rows]
         rng = np.random.default_rng(seed=42)
         cloud_covers = _generer_cloud_cover_serie(len(timestamps), rng)
-        df_synth = pd.DataFrame({
-            "timestamp": pd.to_datetime(timestamps, utc=True),
-            "irradiance_wm2": [
-                _irradiance_clear_sky(latitude, ts) for ts in timestamps
-            ],
-            "cloud_cover_pct": cloud_covers,
-            "temperature_c": [_temperature_synthetique(ts) for ts in timestamps],
-            "production_pv_kw": productions,
-        })
+        df_synth = pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime(timestamps, utc=True),
+                "irradiance_wm2": [_irradiance_clear_sky(latitude, ts) for ts in timestamps],
+                "cloud_cover_pct": cloud_covers,
+                "temperature_c": [_temperature_synthetique(ts) for ts in timestamps],
+                "production_pv_kw": productions,
+            }
+        )
         return df_synth
 
     logger.info("Génération de la production PV synthétique pour '%s'…", site_id)
@@ -329,13 +324,15 @@ def ajouter_production_pv_synthetique(session, site: dict) -> pd.DataFrame:
 
         # float() obligatoire : np.float64 n'est pas sérialisable par psycopg2
         mappings.append({"id": row_id, "production_pv_kw": float(production)})
-        meteo_lignes.append({
-            "timestamp": ts_utc,
-            "irradiance_wm2": float(irradiance),
-            "cloud_cover_pct": float(cloud_cover),
-            "temperature_c": float(temperature),
-            "production_pv_kw": float(production),
-        })
+        meteo_lignes.append(
+            {
+                "timestamp": ts_utc,
+                "irradiance_wm2": float(irradiance),
+                "cloud_cover_pct": float(cloud_cover),
+                "temperature_c": float(temperature),
+                "production_pv_kw": float(production),
+            }
+        )
 
     session.bulk_update_mappings(RealMeasure, mappings)
     session.commit()
@@ -368,10 +365,9 @@ def _irradiance_clear_sky(latitude_deg: float, ts_utc: datetime) -> float:
     decl_rad = math.radians(declination)
     ha_rad = math.radians(hour_angle)
 
-    sin_elev = (
-        math.sin(lat_rad) * math.sin(decl_rad)
-        + math.cos(lat_rad) * math.cos(decl_rad) * math.cos(ha_rad)
-    )
+    sin_elev = math.sin(lat_rad) * math.sin(decl_rad) + math.cos(lat_rad) * math.cos(
+        decl_rad
+    ) * math.cos(ha_rad)
     sin_elev = max(-1.0, min(1.0, sin_elev))  # clamp numérique
     elevation = math.degrees(math.asin(sin_elev))
 
@@ -577,249 +573,6 @@ def entrainer_modele_pv_si_absent(
 
 
 # ---------------------------------------------------------------------------
-# Étape 5 — Prévision consommation 48h
-# ---------------------------------------------------------------------------
-
-
-def generer_prevision_48h(
-    session, site: dict, df_historique: pd.DataFrame, artefact_path: str
-) -> None:
-    """
-    Génère une prévision de consommation sur les 48 prochaines heures
-    et l'insère dans forecasts_consommation.
-
-    Remplace toute prévision existante pour le site (régénération idempotente).
-    """
-    from forecaster.db.models import ConsumptionForecast, ModelVersion
-    from forecaster.predictors.consumption import ConsumptionModel
-
-    site_id = site["site_id"]
-
-    # Suppression des prévisions existantes pour repartir propre
-    session.query(ConsumptionForecast).filter_by(site_id=site_id).delete()
-    session.commit()
-
-    # Chargement du modèle
-    version_active = (
-        session.query(ModelVersion)
-        .filter_by(type_modele="consumption", actif=True, site_id=site_id)
-        .first()
-    )
-    model = ConsumptionModel(version=version_active.version)
-    model.load(Path(artefact_path))
-    logger.info("Modèle chargé depuis %s", artefact_path)
-
-    # Construction des timestamps futurs (maintenant + 15min → +48h)
-    now = datetime.now(tz=UTC)
-    freq = pd.Timedelta(minutes=15)
-    ts_futurs = pd.date_range(
-        start=now + freq,
-        periods=192,  # 48h × 4 pas/h
-        freq=freq,
-        tz="UTC",
-    )
-
-    # Index temporel de l'historique pour les lookups de lags
-    df_hist = df_historique.set_index("timestamp").sort_index()
-    jours_feries_annees = set(
-        holidays.France(years=[now.year, now.year + 1]).keys()
-    )
-
-    def lookup_lag(ts: pd.Timestamp, delta: pd.Timedelta) -> float:
-        """Retourne la valeur historique la plus proche du timestamp demandé."""
-        cible = ts - delta
-        if cible in df_hist.index:
-            return float(df_hist.loc[cible, "conso_kw"])
-        diff_secs = np.abs((df_hist.index - cible).total_seconds())
-        idx_min = int(np.argmin(diff_secs))
-        if diff_secs[idx_min] <= 1800:  # 30 minutes
-            return float(df_hist.iloc[idx_min]["conso_kw"])
-        return float(df_hist["conso_kw"].mean())
-
-    # Construction du DataFrame de features pour la prédiction
-    lignes = []
-    for ts in ts_futurs:
-        horizon_h = round((ts - now).total_seconds() / 3600)
-        lag_1d = lookup_lag(ts, pd.Timedelta(days=1))
-        lag_7d = lookup_lag(ts, pd.Timedelta(days=7))
-        is_holiday = int(ts.date() in jours_feries_annees)
-
-        lignes.append({
-            "timestamp": ts,
-            "horizon_h": horizon_h,
-            "conso_kw_lag_1d": lag_1d,
-            "conso_kw_lag_7d": lag_7d,
-            "temperature_c": 0.0,
-            "temp_lag_1d": 0.0,
-            "temp_lag_7d": 0.0,
-            "is_holiday": is_holiday,
-            "is_school_holiday": 0,
-        })
-
-    df_futur = pd.DataFrame(lignes)
-
-    # Prédiction
-    forecast_points = model.predict(df_futur)
-    logger.info("%d points de prévision consommation générés", len(forecast_points))
-
-    # Insertion en DB
-    now_utc = datetime.now(tz=UTC)
-    enregistrements = [
-        ConsumptionForecast(
-            site_id=site_id,
-            timestamp=fp.timestamp,
-            puissance_kw=max(fp.puissance_kw, 0.0),
-            horizon_h=fp.horizon_h,
-            date_generation=now_utc,
-            version_modele=version_active.version,
-        )
-        for fp in forecast_points
-    ]
-    session.bulk_save_objects(enregistrements)
-    session.commit()
-    logger.info(
-        "%d prévisions insérées dans forecasts_consommation pour '%s'",
-        len(enregistrements),
-        site_id,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Étape 5b — Prévision production PV 48h
-# ---------------------------------------------------------------------------
-
-
-def generer_prevision_pv_48h(session, site: dict, artefact_path: str) -> None:
-    """
-    Génère une prévision de production PV sur les 48 prochaines heures
-    en utilisant les prévisions météo réelles d'Open-Meteo.
-
-    Remplace toute prévision existante pour le site (régénération idempotente).
-    """
-    from forecaster.db.models import ModelVersion, PVProductionForecast
-    from forecaster.fetchers.openmeteo import fetch_forecast
-    from forecaster.predictors.pv_production import PVProductionModel
-
-    site_id = site["site_id"]
-    latitude = site["latitude"]
-    longitude = site["longitude"]
-    p_pv_peak_kw = site["p_pv_peak_kw"]
-
-    # Suppression des prévisions existantes pour repartir propre
-    session.query(PVProductionForecast).filter_by(site_id=site_id).delete()
-    session.commit()
-
-    # Chargement du modèle PV
-    version_active = (
-        session.query(ModelVersion)
-        .filter_by(type_modele="pv_production", actif=True, site_id=site_id)
-        .first()
-    )
-    model = PVProductionModel(version=version_active.version)
-    model.load(Path(artefact_path))
-    logger.info("Modèle PV site '%s' chargé depuis %s", site_id, artefact_path)
-
-    # Récupération de la météo réelle sur 48h
-    logger.info("Récupération météo Open-Meteo (48h) pour '%s'…", site_id)
-    meteo = fetch_forecast(
-        site_id=site_id,
-        latitude=latitude,
-        longitude=longitude,
-        horizon_h=48,
-    )
-
-    # Construire un index horaire de la météo pour interpolation à 15 min
-    df_meteo_h = pd.DataFrame(
-        [
-            {
-                "timestamp": p.timestamp,
-                "temperature_c": p.temperature_c,
-                "irradiance_wm2": p.irradiance_wm2,
-                "cloud_cover_pct": p.cloud_cover_pct,
-            }
-            for p in meteo.points
-        ]
-    )
-    df_meteo_h["timestamp"] = pd.to_datetime(df_meteo_h["timestamp"], utc=True)
-    df_meteo_h = df_meteo_h.set_index("timestamp").sort_index()
-
-    # Rééchantillonnage horaire → 15 min
-    df_meteo_15min = df_meteo_h.resample("15min").interpolate(method="linear")
-    df_meteo_15min["cloud_cover_pct"] = (
-        df_meteo_h[["cloud_cover_pct"]].resample("15min").ffill()["cloud_cover_pct"]
-    )
-    df_meteo_15min = df_meteo_15min.reset_index()
-
-    # Construction des timestamps futurs (maintenant + 15min → +48h)
-    now = datetime.now(tz=UTC)
-    freq = pd.Timedelta(minutes=15)
-    ts_futurs = pd.date_range(
-        start=now + freq,
-        periods=192,
-        freq=freq,
-        tz="UTC",
-    )
-
-    def lookup_meteo(ts: pd.Timestamp) -> dict:
-        """Récupère la météo interpolée pour un timestamp donné."""
-        ts_norm = ts.floor("15min")
-        if ts_norm in df_meteo_15min["timestamp"].values:
-            row = df_meteo_15min[df_meteo_15min["timestamp"] == ts_norm].iloc[0]
-            return {
-                "temperature_c": float(row["temperature_c"]),
-                "irradiance_wm2": float(row["irradiance_wm2"]),
-                "cloud_cover_pct": float(row["cloud_cover_pct"]),
-            }
-        # Fallback : irradiance synthétique si hors plage Open-Meteo
-        return {
-            "temperature_c": _temperature_synthetique(ts.to_pydatetime()),
-            "irradiance_wm2": _irradiance_clear_sky(latitude, ts.to_pydatetime()),
-            "cloud_cover_pct": 30.0,
-        }
-
-    # Construction du DataFrame de features
-    lignes = []
-    for ts in ts_futurs:
-        horizon_h = round((ts - now).total_seconds() / 3600)
-        meteo_ts = lookup_meteo(ts)
-        lignes.append({
-            "timestamp": ts,
-            "horizon_h": horizon_h,
-            "irradiance_wm2": meteo_ts["irradiance_wm2"],
-            "cloud_cover_pct": meteo_ts["cloud_cover_pct"],
-            "temperature_c": meteo_ts["temperature_c"],
-            "p_pv_peak_kw": p_pv_peak_kw,
-        })
-
-    df_futur = pd.DataFrame(lignes)
-
-    # Prédiction
-    forecast_points = model.predict(df_futur)
-    logger.info("%d points de prévision PV générés", len(forecast_points))
-
-    # Insertion en DB
-    now_utc = datetime.now(tz=UTC)
-    enregistrements = [
-        PVProductionForecast(
-            site_id=site_id,
-            timestamp=fp.timestamp,
-            puissance_kw=fp.puissance_kw,  # déjà clippé à 0 dans predict()
-            horizon_h=fp.horizon_h,
-            date_generation=now_utc,
-            version_modele=version_active.version,
-        )
-        for fp in forecast_points
-    ]
-    session.bulk_save_objects(enregistrements)
-    session.commit()
-    logger.info(
-        "%d prévisions insérées dans forecasts_production_pv pour '%s'",
-        len(enregistrements),
-        site_id,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -832,10 +585,10 @@ def _appliquer_migrations() -> None:
     tracké cette DB (déploiement existant avant l'introduction d'Alembic),
     on stamp à 0001 pour éviter de rejouer la création des tables.
     """
-    from alembic import command
     from alembic.config import Config
     from sqlalchemy import inspect
 
+    from alembic import command
     from forecaster.db.session import engine
 
     alembic_cfg = Config(Path(__file__).parent.parent / "alembic.ini")
@@ -855,8 +608,8 @@ def _appliquer_migrations() -> None:
 
 
 def main() -> None:
-    from forecaster.db.models import Base
     from forecaster.db.session import SessionLocal, engine
+    from forecaster.pipeline.forecast import run_forecast
 
     logger.info("=== init_demo — démarrage (%d sites) ===", len(SITES))
 
@@ -869,12 +622,11 @@ def main() -> None:
 
     with SessionLocal() as session:
         # Étapes 2 + 3 : insertion des sites et de leurs historiques
-        df_hist_par_site: dict[str, pd.DataFrame] = {}
         df_pv_par_site: dict[str, pd.DataFrame] = {}
 
         for site in SITES:
             inserer_site_si_absent(session, site)
-            df_hist_par_site[site["site_id"]] = charger_historique_si_absent(session, site)
+            charger_historique_si_absent(session, site)
             df_pv_par_site[site["site_id"]] = ajouter_production_pv_synthetique(session, site)
 
         # Étapes 4 + 5 : entraînement et prévision par site
@@ -882,21 +634,18 @@ def main() -> None:
             site_id = site["site_id"]
 
             # Entraînement ConsumptionModel
-            artefact_conso = entrainer_modele_si_absent(session, site_id)
+            entrainer_modele_si_absent(session, site_id)
 
             # Entraînement PVProductionModel (données synthétiques propres au site)
-            artefact_pv = entrainer_modele_pv_si_absent(
+            entrainer_modele_pv_si_absent(
                 session,
                 site_id,
                 df_pv_par_site[site_id],
                 site["p_pv_peak_kw"],
             )
 
-            # Prévision consommation 48h
-            generer_prevision_48h(session, site, df_hist_par_site[site_id], artefact_conso)
-
-            # Prévision production PV 48h
-            generer_prevision_pv_48h(session, site, artefact_pv)
+            # Prévisions consommation et PV 48h — timestamps alignés sur les quarts d'heure
+            run_forecast(session, site_id, horizon_h=48)
 
     logger.info("=== init_demo — terminé ✓ ===")
 

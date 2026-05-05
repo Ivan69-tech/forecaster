@@ -1,13 +1,14 @@
 {
-    "permissions": {
-      "allow": [
-        "Bash(uv:*)",
-        "Bash(python:*)",
-        "Bash(pip:*)",
-        "Bash(pytest:*)",
-        "Bash(cat:*)",
-        "Bash(ls:*)"
-      ],
-      "deny": []
-    }
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(python:*)",
+      "Bash(pip:*)",
+      "Bash(pytest:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(grep -E \"^d|\\\\.py$\")"
+    ],
+    "deny": []
   }
+}
