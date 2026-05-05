@@ -254,6 +254,42 @@ def test_predict_consumption_leve_erreur_sans_modele_actif(
         _predict_consumption(db_session, site_forecast, weather, 48)
 
 
+def test_predict_consumption_reentrainement_si_artefact_introuvable(
+    db_session: Session, site_forecast: Site, tmp_path: Path
+) -> None:
+    """Si l'artefact est introuvable sur disque, _predict_consumption réentraîne et prédit."""
+    from forecaster.db.models import ModelVersion
+
+    _inserer_mesures_recentes(db_session, site_forecast, N_LIGNES)
+
+    mv_perdu = ModelVersion(
+        site_id=site_forecast.site_id,
+        type_modele="consumption",
+        version="version_perdue",
+        date_entrainement=datetime.now(tz=UTC),
+        mape_validation=5.0,
+        actif=True,
+        chemin_artefact="/data/models/inexistant/consumption/version_perdue.joblib",
+    )
+    db_session.add(mv_perdu)
+    db_session.flush()
+
+    def _fake_run_training(session: Session, model_type: str, site_id: str) -> float:
+        session.query(ModelVersion).filter_by(
+            type_modele=model_type, actif=True, site_id=site_id
+        ).update({"actif": False})
+        _creer_modele_actif(session, model_type, tmp_path, site_id)
+        return 5.0
+
+    weather = _generer_weather_mock(horizon_h=24)
+    with patch(
+        "forecaster.pipeline.training.run_training", side_effect=_fake_run_training
+    ):
+        points = _predict_consumption(db_session, site_forecast, weather, 24)
+
+    assert len(points) == 24 * 4
+
+
 # ---------------------------------------------------------------------------
 # Tests _predict_pv
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ services:
     env_file:
       - ../.env
     volumes:
-      - ./models_data:/data/models
+      - /data/models:/data/models
       - ../scripts:/app/scripts:ro   # mount local pour éviter un rebuild à chaque modif
     restart: "no"
 
@@ -23,5 +23,5 @@ services:
     env_file:
       - ../.env
     volumes:
-      - ./models_data:/data/models
+      - /data/models:/data/models
     restart: unless-stopped

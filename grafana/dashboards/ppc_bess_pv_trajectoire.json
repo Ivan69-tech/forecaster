@@ -1,0 +1,667 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": 22,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "cfkxvhgeexxxcf"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": true,
+            "axisColorMode": "text",
+            "axisLabel": "kW",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": null }]
+          },
+          "unit": "kW"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Consigne (kW)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } },
+              { "id": "custom.lineStyle", "value": { "dash": [8, 6], "fill": "dash" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "P réelle (kW)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Setpoint optimal trajectoire (kW)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } },
+              { "id": "custom.lineStyle", "value": { "dash": [8, 6], "fill": "dash" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["last", "min", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"P réelle (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_p_kW'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"P réelle (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_p_kW'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "A",
+          "sql": { "columns": [{ "parameters": [], "type": "function" }], "groupBy": [{ "property": { "type": "string" }, "type": "groupBy" }], "limit": 50 },
+          "timeColumns": ["time"]
+        },
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Consigne (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_setpoint'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Consigne (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_setpoint'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "B",
+          "timeColumns": ["time"]
+        },
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Setpoint optimal trajectoire (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_trajectory_optimal_setpoint_kW'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Setpoint optimal trajectoire (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_trajectory_optimal_setpoint_kW'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "C",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "BESS — Puissance réelle vs Consigne (kW)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "teal", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "kWh",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "kwatth"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "SOE réel (kWh)" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "teal", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Cible énergie (kWh)" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } },
+              { "id": "custom.lineStyle", "value": { "dash": [8, 6], "fill": "dash" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": ["last", "min", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(soc.timestamp) AS time,\n  soc.value::float / 100.0\n    * (SELECT MAX(value::float) FROM ppc_raw WHERE site_id = '${site_id}' AND key = 'bess_0_cap_kWh')\n  AS \"SOE réel (kWh)\"\nFROM ppc_raw soc\nWHERE soc.site_id = '${site_id}'\n  AND soc.key = 'bess_0_soc_pc'\n  AND to_timestamp(soc.timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY soc.timestamp",
+          "rawQueryText": "SELECT to_timestamp(soc.timestamp) AS time,\n  soc.value::float / 100.0\n    * (SELECT MAX(value::float) FROM ppc_raw WHERE site_id = '${site_id}' AND key = 'bess_0_cap_kWh')\n  AS \"SOE réel (kWh)\"\nFROM ppc_raw soc\nWHERE soc.site_id = '${site_id}'\n  AND soc.key = 'bess_0_soc_pc'\n  AND to_timestamp(soc.timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY soc.timestamp",
+          "refId": "A",
+          "timeColumns": ["time"]
+        },
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Cible énergie (kWh)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'next_energy_target_kWh'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Cible énergie (kWh)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'next_energy_target_kWh'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "B",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "BESS — Énergie réelle vs Cible (kWh)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "purple", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "%",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red" },
+              { "color": "orange", "value": 10 },
+              { "color": "green", "value": 20 },
+              { "color": "orange", "value": 85 },
+              { "color": "red", "value": 95 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "id": 2,
+      "options": {
+        "legend": { "calcs": ["last", "min", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"SOC (%)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_soc_pc'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"SOC (%)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_soc_pc'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "BESS — SOC (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "yellow", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "kW",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "kW"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 27 },
+      "id": 4,
+      "options": {
+        "legend": { "calcs": ["last", "min", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"P PV (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'pv_0_p_kW'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"P PV (kW)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'pv_0_p_kW'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "PV — Puissance (kW)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 3,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line+area" }
+          },
+          "mappings": [
+            {
+              "options": {
+                "1": { "color": "green", "index": 0, "text": "Nominal" },
+                "2": { "color": "red", "index": 1, "text": "Erreur" }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 3,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red" }, { "color": "green", "value": 1 }, { "color": "red", "value": 2 }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 27 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"État\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'follow_energy_trajectory_state'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"État\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'follow_energy_trajectory_state'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "Contrôle Trajectoire — État (1=Nominal, 2=Erreur)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "light-blue", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": true,
+            "axisColorMode": "text",
+            "axisLabel": "kVAr",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] },
+          "unit": "kVAr"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 36 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Q BESS (kVAr)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_q_kVAr'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Q BESS (kVAr)\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_q_kVAr'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "BESS — Puissance Réactive (kVAr)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "0": { "color": "red", "index": 1, "text": "Déconnecté" },
+                "1": { "color": "green", "index": 0, "text": "Connecté" }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red" }, { "color": "green", "value": 1 }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 44 },
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS value\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_is_connected'\nORDER BY timestamp DESC\nLIMIT 1",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS value\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_is_connected'\nORDER BY timestamp DESC\nLIMIT 1",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "BESS Connexion",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "0": { "color": "green", "index": 0, "text": "OK" },
+                "1": { "color": "red", "index": 1, "text": "Erreur" }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green" }, { "color": "red", "value": 1 }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 44 },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS value\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_is_in_error'\nORDER BY timestamp DESC\nLIMIT 1",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS value\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'bess_0_is_in_error'\nORDER BY timestamp DESC\nLIMIT 1",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "BESS Erreur",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            {
+              "options": {
+                "1": { "color": "green", "index": 0, "text": "Nominal" },
+                "2": { "color": "red", "index": 1, "text": "Erreur" }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red" }, { "color": "green", "value": 1 }, { "color": "red", "value": 2 }]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 44 },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS value\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'follow_energy_trajectory_state'\nORDER BY timestamp DESC\nLIMIT 1",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS value\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'follow_energy_trajectory_state'\nORDER BY timestamp DESC\nLIMIT 1",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "État Trajectoire",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "semi-dark-green", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 44 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cfkxvhgeexxxcf" },
+          "editorMode": "code",
+          "format": "table",
+          "queryType": "table",
+          "rawSql": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Watchdog\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'watchdog_bess'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "rawQueryText": "SELECT to_timestamp(timestamp) AS time, value::float AS \"Watchdog\"\nFROM ppc_raw\nWHERE site_id = '${site_id}'\n  AND key = 'watchdog_bess'\n  AND to_timestamp(timestamp) BETWEEN $__timeFrom() AND $__timeTo()\nORDER BY timestamp",
+          "refId": "A",
+          "timeColumns": ["time"]
+        }
+      ],
+      "title": "Watchdog BESS",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["bess", "pv", "trajectory"],
+  "templating": {
+    "list": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cfkxvhgeexxxcf"
+        },
+        "definition": "SELECT site_id FROM sites ORDER BY site_id",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Site",
+        "multi": false,
+        "name": "site_id",
+        "options": [],
+        "query": "SELECT site_id FROM sites ORDER BY site_id",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-30m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "PPC - server-spotapi - BESS & PV — Suivi de Trajectoire",
+  "uid": "trajectory-debug-v1",
+  "version": 5,
+  "weekStart": ""
+}

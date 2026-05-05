@@ -117,7 +117,25 @@ def _predict_consumption(
         )
 
     model = ConsumptionModel(version=model_version.version)
-    model.load(Path(model_version.chemin_artefact))
+    try:
+        model.load(Path(model_version.chemin_artefact))
+    except FileNotFoundError:
+        logger.warning(
+            "_predict_consumption | site=%s | artefact introuvable (%s) — réentraînement",
+            site.site_id,
+            model_version.chemin_artefact,
+        )
+        from forecaster.pipeline.training import run_training
+
+        run_training(session, "consumption", site.site_id)
+        session.flush()
+        model_version = get_active_model_version(session, "consumption", site.site_id)
+        if model_version is None:
+            raise ForecastUnavailableError(
+                f"Aucun modèle consumption actif après réentraînement pour '{site.site_id}'."
+            )
+        model = ConsumptionModel(version=model_version.version)
+        model.load(Path(model_version.chemin_artefact))
 
     now = datetime.now(tz=UTC)
     # Aligner sur le pas de 15 min inférieur pour que les timestamps soient
